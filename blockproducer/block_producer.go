@@ -5,7 +5,9 @@ import (
 
 	"github.com/aergoio/aergo-lib/db"
 	"github.com/celer-network/sidechain-rollup-aggregator/statemachine"
+	"github.com/celer-network/sidechain-rollup-aggregator/storage"
 	"github.com/celer-network/sidechain-rollup-aggregator/types"
+	"github.com/spf13/viper"
 )
 
 type BlockProducer struct {
@@ -14,20 +16,41 @@ type BlockProducer struct {
 	txGenerator              *TransactionGenerator
 	blockSubmitter           *BlockSubmitter
 	tokenAddressToTokenIndex map[string]*big.Int
+
+	numTransitionsInBlock int
 }
 
-func NewBlockProducer(db db.DB) *BlockProducer {
+func NewBlockProducer(mainDbDir string, treeDbDir string) (*BlockProducer, error) {
+	mainDb := db.NewDB(db.BadgerImpl, mainDbDir)
+	treeDb := db.NewDB(db.BadgerImpl, treeDbDir)
+	storage := storage.NewStorage(mainDb)
+
 	// TODO: Sync
 
-	return &BlockProducer{
-		stateMachine:   statemachine.NewStateMachine(db),
-		txGenerator:    NewTransactionGenerator(),
-		blockSubmitter: NewBlockSubmitter(),
+	serializer, err := types.NewSerializer()
+	if err != nil {
+		return nil, err
 	}
+	numTransitionsInBlock := viper.GetInt("numTransitionsInBlock")
+
+	return &BlockProducer{
+		stateMachine:          statemachine.NewStateMachine(storage, treeDb, serializer),
+		txGenerator:           NewTransactionGenerator(storage),
+		blockSubmitter:        NewBlockSubmitter(serializer),
+		numTransitionsInBlock: numTransitionsInBlock,
+	}, nil
 }
 
 func (bp *BlockProducer) Start() {
+	go bp.processTransactions()
 	bp.txGenerator.Start()
+}
+
+func (bp *BlockProducer) processTransactions() {
+	for {
+		tx := <-bp.txGenerator.txQueue
+		bp.applyTransaction(tx)
+	}
 }
 
 func (bp *BlockProducer) applyTransaction(signedTransaction *types.SignedTransaction) (*types.SignedStateReceipt, error) {
@@ -39,6 +62,11 @@ func (bp *BlockProducer) applyTransaction(signedTransaction *types.SignedTransac
 	if err != nil {
 		return nil, err
 	}
+
+	if len(bp.pendingBlock.Transitions) > bp.numTransitionsInBlock {
+		bp.blockSubmitter.submitBlock(bp.pendingBlock)
+	}
+
 	// TODO: Generate receipt and submit block
 	return nil, nil
 }

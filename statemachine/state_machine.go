@@ -6,31 +6,32 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/celer-network/sidechain-rollup-aggregator/serialization"
 	"github.com/ethereum/go-ethereum/common"
 
-	smt "github.com/aergoio/SMT"
 	"github.com/aergoio/aergo-lib/db"
+	"github.com/celer-network/sidechain-rollup-aggregator/smt"
+	"github.com/celer-network/sidechain-rollup-aggregator/storage"
 	"github.com/celer-network/sidechain-rollup-aggregator/types"
 )
 
 var errAccountNotFound = errors.New("Account not found")
 
 type StateMachine struct {
-	db                       db.DB
-	tree                     *smt.SMT
-	addressToKey             map[string][]byte
-	lastKey                  *big.Int
-	tokenAddressToTokenIndex map[string]*big.Int
+	storage      *storage.Storage
+	tree         *smt.SMT
+	serializer   *types.Serializer
+	addressToKey map[string][]byte
+	lastKey      *big.Int
 }
 
-func NewStateMachine(db db.DB) *StateMachine {
+func NewStateMachine(storage *storage.Storage, treeDb db.DB, serializer *types.Serializer) *StateMachine {
 	// TODO: restore from db
 
 	return &StateMachine{
-		db:      db,
-		tree:    smt.NewSMT(nil, smt.Hasher, db),
-		lastKey: big.NewInt(-1),
+		storage:    storage,
+		tree:       smt.NewSMT(nil, smt.Hasher, treeDb),
+		serializer: serializer,
+		lastKey:    big.NewInt(-1),
 	}
 }
 
@@ -81,11 +82,10 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 }
 
 func (sm *StateMachine) applyDeposit(tx *types.DepositTransaction) ([]*types.AccountInfoUpdate, error) {
-	tokenIndexBigInt, exists := sm.tokenAddressToTokenIndex[tx.Token.Hex()]
-	if !exists {
-		return nil, errors.New("Token not mapped")
+	tokenIndex, err := sm.getTokenIndex(tx.Token)
+	if err != nil {
+		return nil, err
 	}
-	tokenIndex := tokenIndexBigInt.Uint64()
 
 	// Validations
 	amount := tx.Amount
@@ -128,11 +128,10 @@ func (sm *StateMachine) applyDeposit(tx *types.DepositTransaction) ([]*types.Acc
 }
 
 func (sm *StateMachine) applyWithdraw(tx *types.WithdrawTransaction) ([]*types.AccountInfoUpdate, error) {
-	tokenIndexBigInt, exists := sm.tokenAddressToTokenIndex[tx.Token.Hex()]
-	if !exists {
-		return nil, errors.New("Token not mapped")
+	tokenIndex, err := sm.getTokenIndex(tx.Token)
+	if err != nil {
+		return nil, err
 	}
-	tokenIndex := tokenIndexBigInt.Uint64()
 
 	// Validations
 	account := tx.Account
@@ -169,11 +168,10 @@ func (sm *StateMachine) applyWithdraw(tx *types.WithdrawTransaction) ([]*types.A
 }
 
 func (sm *StateMachine) applyTransfer(tx *types.TransferTransaction) ([]*types.AccountInfoUpdate, error) {
-	tokenIndexBigInt, exists := sm.tokenAddressToTokenIndex[tx.Token.Hex()]
-	if !exists {
-		return nil, errors.New("Token not mapped")
+	tokenIndex, err := sm.getTokenIndex(tx.Token)
+	if err != nil {
+		return nil, err
 	}
-	tokenIndex := tokenIndexBigInt.Uint64()
 
 	// Validations
 	sender := tx.Sender
@@ -263,7 +261,7 @@ func (sm *StateMachine) getAccountInfo(address common.Address) (*types.AccountIn
 	if err != nil {
 		return nil, err
 	}
-	info, err := serialization.DeserializeAccountInfo(data)
+	info, err := sm.serializer.DeserializeAccountInfo(data)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +269,7 @@ func (sm *StateMachine) getAccountInfo(address common.Address) (*types.AccountIn
 }
 
 func (sm *StateMachine) setAccountInfo(address common.Address, info *types.AccountInfo) error {
-	data, err := serialization.SerializeAccountInfo(info)
+	data, err := info.Serialize(sm.serializer)
 	if err != nil {
 		return err
 	}
@@ -281,6 +279,17 @@ func (sm *StateMachine) setAccountInfo(address common.Address, info *types.Accou
 		return err
 	}
 	return sm.tree.Commit()
+}
+
+func (sm *StateMachine) getTokenIndex(tokenAddress common.Address) (uint64, error) {
+	tokenIndexBytes := sm.storage.Get(
+		storage.NamespaceTokenAddressToTokenIndex,
+		tokenAddress.Bytes(),
+	)
+	if tokenIndexBytes == nil {
+		return 0, errors.New("Token not mapped")
+	}
+	return new(big.Int).SetBytes(tokenIndexBytes).Uint64(), nil
 }
 
 func maybeExpandBalancesNonces(tokenIndex uint64, accountInfo *types.AccountInfo) ([]*big.Int, []*big.Int) {
