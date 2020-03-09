@@ -9,9 +9,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/aergoio/aergo-lib/db"
-	"github.com/celer-network/sidechain-rollup-aggregator/smt"
-	"github.com/celer-network/sidechain-rollup-aggregator/storage"
-	"github.com/celer-network/sidechain-rollup-aggregator/types"
+	"github.com/celer-network/go-rollup/smt"
+	"github.com/celer-network/go-rollup/storage"
+	"github.com/celer-network/go-rollup/types"
 )
 
 var errAccountNotFound = errors.New("Account not found")
@@ -36,7 +36,7 @@ func NewStateMachine(storage *storage.Storage, treeDb db.DB, serializer *types.S
 }
 
 func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*types.StateUpdate, error) {
-	log.Print("Validating address")
+	log.Print("Apply transaction")
 	tx := signedTx.Transaction
 	var accountInfoUpdates []*types.AccountInfoUpdate
 	var err error
@@ -44,16 +44,19 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 	case types.TransactionTypeDeposit:
 		accountInfoUpdates, err = sm.applyDeposit(tx.(*types.DepositTransaction))
 		if err != nil {
+			log.Err(err).Send()
 			return nil, err
 		}
 	case types.TransactionTypeWithdraw:
 		accountInfoUpdates, err = sm.applyWithdraw(tx.(*types.WithdrawTransaction))
 		if err != nil {
+			log.Err(err).Send()
 			return nil, err
 		}
 	case types.TransactionTypeTransfer:
 		accountInfoUpdates, err = sm.applyTransfer(tx.(*types.TransferTransaction))
 		if err != nil {
+			log.Err(err).Send()
 			return nil, err
 		}
 	}
@@ -64,6 +67,7 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 		key := sm.addressToKey[info.Account.Hex()]
 		proof, proofErr := sm.tree.MerkleProof(key)
 		if proofErr != nil {
+			log.Err(proofErr).Send()
 			return nil, err
 		}
 		entries = append(entries, &types.StateUpdateEntry{
@@ -282,6 +286,7 @@ func (sm *StateMachine) setAccountInfo(address common.Address, info *types.Accou
 }
 
 func (sm *StateMachine) getTokenIndex(tokenAddress common.Address) (uint64, error) {
+	log.Printf("getTokenIndex for %s", tokenAddress.Hex())
 	tokenIndexBytes := sm.storage.Get(
 		storage.NamespaceTokenAddressToTokenIndex,
 		tokenAddress.Bytes(),

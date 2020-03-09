@@ -5,6 +5,13 @@ type RollupBlock struct {
 	Transitions []Transition
 }
 
+func NewRollupBlock(blockNumber uint64) *RollupBlock {
+	return &RollupBlock{
+		BlockNumber: blockNumber,
+		Transitions: nil,
+	}
+}
+
 func (block *RollupBlock) SerializeTransactions(s *Serializer) ([][]byte, error) {
 	transitions := block.Transitions
 	serializedTransitions := make([][]byte, len(transitions))

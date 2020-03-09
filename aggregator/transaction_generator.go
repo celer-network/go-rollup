@@ -1,10 +1,10 @@
-package blockproducer
+package aggregator
 
 import (
+	"github.com/celer-network/go-rollup/storage"
+	"github.com/celer-network/go-rollup/types"
 	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
 	"github.com/celer-network/sidechain-contracts/bindings/go/sidechain"
-	"github.com/celer-network/sidechain-rollup-aggregator/storage"
-	"github.com/celer-network/sidechain-rollup-aggregator/types"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -25,29 +25,24 @@ type TransactionGenerator struct {
 	txQueue             chan *types.SignedTransaction
 }
 
-func NewTransactionGenerator(storage *storage.Storage) *TransactionGenerator {
-	mainchainClient, err := ethclient.Dial(viper.GetString("mainchainEndpoint"))
-	if err != nil {
-		log.Fatal().Msg(err.Error())
-	}
-	sidechainClient, err := ethclient.Dial(viper.GetString("mainChainEndpoint"))
-	if err != nil {
-		log.Fatal().Msg(err.Error())
-	}
-
-	rollupChainAddress := viper.GetString("rollupChainAddress")
-	rollupChain, err := rollup.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
+func NewTransactionGenerator(
+	storage *storage.Storage,
+	mainchainClient *ethclient.Client,
+	rollupChain *rollup.RollupChain,
+) *TransactionGenerator {
+	sidechainClient, err := ethclient.Dial(viper.GetString("sideChainEndpoint"))
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
 
-	rollupTokenRegistryAddress := viper.GetString("rollupTokenRegistryAddress")
+	rollupTokenRegistryAddress := viper.GetString("rollupTokenRegistry")
+	log.Printf("rollupTokenRegistryAddress %s", rollupTokenRegistryAddress)
 	rollupTokenRegistry, err := rollup.NewRollupTokenRegistry(common.HexToAddress(rollupTokenRegistryAddress), mainchainClient)
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
 
-	tokenMapperAddress := viper.GetString("tokenMapperAddress")
+	tokenMapperAddress := viper.GetString("tokenMapper")
 	tokenMapper, err := sidechain.NewTokenMapper(common.HexToAddress(tokenMapperAddress), sidechainClient)
 	if err != nil {
 		log.Fatal().Msg(err.Error())
@@ -65,22 +60,27 @@ func NewTransactionGenerator(storage *storage.Storage) *TransactionGenerator {
 
 func (tg *TransactionGenerator) Start() {
 	go tg.watchRollupTokenRegistry()
+	go tg.watchTokenMapper()
 }
 
 func (tg *TransactionGenerator) watchRollupTokenRegistry() error {
+	log.Print("Watching RollupTokenRegistry")
 	channel := make(chan *rollup.RollupTokenRegistryTokenRegistered)
 	sub, err := tg.rollupTokenRegistry.WatchTokenRegistered(&bind.WatchOpts{}, channel, nil, nil)
 	if err != nil {
+		log.Err(err).Send()
 		return err
 	}
 	for {
 		select {
 		case event := <-channel:
+			log.Printf("Registered token %s as %s", event.TokenAddress.Hex(), event.TokenIndex.String())
 			tg.storage.Set(
 				storage.NamespaceTokenAddressToTokenIndex,
 				event.TokenAddress.Bytes(),
 				event.TokenIndex.Bytes())
 		case err := <-sub.Err():
+			log.Err(err).Send()
 			return err
 		}
 	}
@@ -96,6 +96,7 @@ func (tg *TransactionGenerator) watchTokenMapper() error {
 		select {
 		case event := <-channel:
 			sidechainErc20Address := event.SidechainToken
+			log.Printf("Mapped token %s to %s", event.MainchainToken.Hex(), event.SidechainToken.Hex())
 			tg.storage.Set(
 				storage.NamespaceMainchainTokenAddressToSidechainTokenAddress,
 				event.MainchainToken.Bytes(),
@@ -104,6 +105,7 @@ func (tg *TransactionGenerator) watchTokenMapper() error {
 			if err != nil {
 				return err
 			}
+			log.Printf("Watching %s", sidechainErc20Address.Hex())
 			go tg.watchToken(sidechainErc20)
 		case err := <-sub.Err():
 			return err
@@ -130,6 +132,7 @@ func (tg *TransactionGenerator) watchToken(contract *sidechain.SidechainERC20) e
 	for {
 		select {
 		case event := <-transferChannel:
+			log.Print("Caught transfer")
 			tx := &types.TransferTransaction{
 				Sender:    event.Sender,
 				Recipient: event.Recipient,
@@ -142,6 +145,7 @@ func (tg *TransactionGenerator) watchToken(contract *sidechain.SidechainERC20) e
 				Transaction: tx,
 			}
 		case event := <-depositChannel:
+			log.Print("Caught deposit")
 			tx := &types.DepositTransaction{
 				Account: event.Account,
 				Token:   event.MainchainToken,
@@ -152,6 +156,7 @@ func (tg *TransactionGenerator) watchToken(contract *sidechain.SidechainERC20) e
 				Transaction: tx,
 			}
 		case event := <-withdrawChannel:
+			log.Print("Caught withdraw")
 			tx := &types.WithdrawTransaction{
 				Account: event.Account,
 				Token:   event.MainchainToken,
