@@ -10,9 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 
-	"github.com/aergoio/aergo-lib/db"
+	"github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/statemachine"
-	"github.com/celer-network/go-rollup/storage"
 	"github.com/celer-network/go-rollup/types"
 	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
 	"github.com/spf13/viper"
@@ -28,10 +27,11 @@ type Aggregator struct {
 	numTransitionsInBlock int
 }
 
-func NewAggregator(mainDbDir string, treeDbDir string, mainchainKeystore string) (*Aggregator, error) {
-	mainDb := db.NewDB(db.BadgerImpl, mainDbDir)
-	treeDb := db.NewDB(db.BadgerImpl, treeDbDir)
-	storage := storage.NewStorage(mainDb)
+func NewAggregator(dbDir string, mainchainKeystore string) (*Aggregator, error) {
+	db, err := db.NewDB(dbDir)
+	if err != nil {
+		return nil, err
+	}
 
 	// TODO: Sync
 
@@ -63,8 +63,8 @@ func NewAggregator(mainDbDir string, treeDbDir string, mainchainKeystore string)
 	}
 
 	return &Aggregator{
-		stateMachine:   statemachine.NewStateMachine(storage, treeDb, serializer),
-		txGenerator:    NewTransactionGenerator(storage, mainchainClient, rollupChain),
+		stateMachine:   statemachine.NewStateMachine(db, serializer),
+		txGenerator:    NewTransactionGenerator(db, mainchainClient, rollupChain),
 		blockSubmitter: NewBlockSubmitter(mainchainClient, mainchainAuth, serializer, rollupChain),
 
 		pendingBlock:          types.NewRollupBlock(0),

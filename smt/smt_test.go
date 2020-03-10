@@ -1,28 +1,19 @@
-/**
- *  @file
- *  @copyright defined in aergo/LICENSE.txt
- */
-
 package smt
 
 import (
 	"bytes"
 	"runtime"
 
-	//"io/ioutil"
 	"os"
 	"path"
 	"time"
 
-	//"encoding/hex"
 	"fmt"
 	"math/rand"
 	"sort"
 	"testing"
 
-	"github.com/aergoio/aergo-lib/db"
-	//"github.com/dgraph-io/badger"
-	//"github.com/dgraph-io/badger/options"
+	"github.com/celer-network/go-rollup/db"
 )
 
 func TestSmtEmptyTrie(t *testing.T) {
@@ -365,7 +356,10 @@ func TestSmtCommit(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st := db.NewDB(db.BadgerImpl, dbPath)
+	st, err := db.NewDB(dbPath)
+	if err != nil {
+		t.Fatal("Failed to initialize db", err)
+	}
 
 	smt := NewSMT(nil, Hasher, st)
 	keys := getFreshData(32, 32)
@@ -402,7 +396,10 @@ func TestSmtRevert(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st := db.NewDB(db.BadgerImpl, dbPath)
+	st, err := db.NewDB(dbPath)
+	if err != nil {
+		t.Fatal("Failed to initialize db", err)
+	}
 
 	smt := NewSMT(nil, Hasher, st)
 	smt.Commit()
@@ -440,7 +437,11 @@ func TestSmtRevert(t *testing.T) {
 	if len(smt.db.liveCache) != 0 {
 		t.Fatal("live cache not reset after revert")
 	}
-	if len(smt.db.store.Get(newRoot)) != 0 {
+	nodes, _, err := smt.db.store.Get(db.NamespaceSMT, newRoot)
+	if err != nil {
+		t.Fatal("Failed to get nodes", err)
+	}
+	if len(nodes) != 0 {
 		t.Fatal("nodes not deleted from database")
 	}
 	for _, key := range newKeys {
@@ -451,12 +452,20 @@ func TestSmtRevert(t *testing.T) {
 	}
 	// Check all reverted nodes have been deleted
 	for node, _ := range updatedNodes2 {
-		if len(smt.db.store.Get(node[:])) != 0 {
+		nodes, _, err := smt.db.store.Get(db.NamespaceSMT, node[:])
+		if err != nil {
+			t.Fatal("Failed to get nodes", err)
+		}
+		if len(nodes) != 0 {
 			t.Fatal("nodes not deleted from database", node)
 		}
 	}
 	for node, _ := range updatedNodes1 {
-		if len(smt.db.store.Get(node[:])) != 0 {
+		nodes, _, err := smt.db.store.Get(db.NamespaceSMT, node[:])
+		if err != nil {
+			t.Fatal("Failed to get nodes", err)
+		}
+		if len(nodes) != 0 {
 			t.Fatal("nodes not deleted from database", node)
 		}
 	}
@@ -469,7 +478,10 @@ func TestSmtRaisesError(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st := db.NewDB(db.BadgerImpl, dbPath)
+	st, err := db.NewDB(dbPath)
+	if err != nil {
+		t.Fatal("Failed to initialize db", err)
+	}
 
 	smt := NewSMT(nil, Hasher, st)
 	// Add data to empty trie
@@ -487,7 +499,7 @@ func TestSmtRaisesError(t *testing.T) {
 			t.Fatal("Error not created if database doesnt have a node")
 		}
 	}
-	_, _, err := smt.MerkleProofCompressed(keys[0])
+	_, _, err = smt.MerkleProofCompressed(keys[0])
 	if err == nil {
 		t.Fatal("Error not created if database doesnt have a node")
 	}
@@ -515,7 +527,10 @@ func TestStash(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st := db.NewDB(db.BadgerImpl, dbPath)
+	st, err := db.NewDB(dbPath)
+	if err != nil {
+		t.Fatal("Failed to initialize db")
+	}
 	smt := NewSMT(nil, Hasher, st)
 	// Add data to empty trie
 	keys := getFreshData(20, 32)
@@ -616,7 +631,10 @@ func BenchmarkCacheHeightLimit233(b *testing.B) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st := db.NewDB(db.BadgerImpl, dbPath)
+	st, err := db.NewDB(dbPath)
+	if err != nil {
+		b.Fatal("Failed to initialize db", err)
+	}
 	smt := NewSMT(nil, Hasher, st)
 	smt.CacheHeightLimit = 233
 	benchmark10MAccounts10Ktps(smt, b)
@@ -628,7 +646,10 @@ func BenchmarkCacheHeightLimit238(b *testing.B) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st := db.NewDB(db.BadgerImpl, dbPath)
+	st, err := db.NewDB(dbPath)
+	if err != nil {
+		b.Fatal("Failed to initialize db", err)
+	}
 	smt := NewSMT(nil, Hasher, st)
 	smt.CacheHeightLimit = 238
 	benchmark10MAccounts10Ktps(smt, b)
@@ -640,7 +661,10 @@ func BenchmarkCacheHeightLimit245(b *testing.B) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st := db.NewDB(db.BadgerImpl, dbPath)
+	st, err := db.NewDB(dbPath)
+	if err != nil {
+		b.Fatal("Failed to initialize db", err)
+	}
 	smt := NewSMT(nil, Hasher, st)
 	smt.CacheHeightLimit = 245
 	benchmark10MAccounts10Ktps(smt, b)

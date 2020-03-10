@@ -1,8 +1,3 @@
-/**
- *  @file
- *  @copyright defined in aergo/LICENSE.txt
- */
-
 package smt
 
 // The Package Trie implements a sparse merkle trie.
@@ -12,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/aergoio/aergo-lib/db"
+	"github.com/celer-network/go-rollup/db"
 )
 
 // TODO when using the SMT, make sure keys and values are same length as Hash
@@ -51,7 +46,7 @@ type SMT struct {
 }
 
 // NewSMT creates a new SMT given a keySize and a hash function.
-func NewSMT(root []byte, hash func(data ...[]byte) []byte, store db.DB) *SMT {
+func NewSMT(root []byte, hash func(data ...[]byte) []byte, store *db.DB) *SMT {
 	s := &SMT{
 		hash:       hash,
 		TrieHeight: len(hash([]byte("height"))) * 8, // hash any string to get output length
@@ -368,8 +363,12 @@ func (s *SMT) loadBatch(root []byte) ([][]byte, error) {
 		s.LoadDbCounter++
 		s.loadDbMux.Unlock()
 	}
+
 	s.db.lock.RLock()
-	dbval := s.db.store.Get(root)
+	dbval, _, err := s.db.store.Get(db.NamespaceSMT, root)
+	if err != nil {
+		return nil, err
+	}
 	s.db.lock.RUnlock()
 	nodeSize := len(dbval)
 	if nodeSize != 0 {

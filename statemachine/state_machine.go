@@ -8,28 +8,27 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/aergoio/aergo-lib/db"
+	"github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/smt"
-	"github.com/celer-network/go-rollup/storage"
 	"github.com/celer-network/go-rollup/types"
 )
 
 var errAccountNotFound = errors.New("Account not found")
 
 type StateMachine struct {
-	storage      *storage.Storage
+	db           *db.DB
 	tree         *smt.SMT
 	serializer   *types.Serializer
 	addressToKey map[string][]byte
 	lastKey      *big.Int
 }
 
-func NewStateMachine(storage *storage.Storage, treeDb db.DB, serializer *types.Serializer) *StateMachine {
+func NewStateMachine(db *db.DB, serializer *types.Serializer) *StateMachine {
 	// TODO: restore from db
 
 	return &StateMachine{
-		storage:    storage,
-		tree:       smt.NewSMT(nil, smt.Hasher, treeDb),
+		db:         db,
+		tree:       smt.NewSMT(nil, smt.Hasher, db),
 		serializer: serializer,
 		lastKey:    big.NewInt(-1),
 	}
@@ -287,13 +286,17 @@ func (sm *StateMachine) setAccountInfo(address common.Address, info *types.Accou
 
 func (sm *StateMachine) getTokenIndex(tokenAddress common.Address) (uint64, error) {
 	log.Printf("getTokenIndex for %s", tokenAddress.Hex())
-	tokenIndexBytes := sm.storage.Get(
-		storage.NamespaceTokenAddressToTokenIndex,
+	tokenIndexBytes, exists, err := sm.db.Get(
+		db.NamespaceTokenAddressToTokenIndex,
 		tokenAddress.Bytes(),
 	)
-	if tokenIndexBytes == nil {
+	if err != nil {
+		return 0, err
+	}
+	if !exists {
 		return 0, errors.New("Token not mapped")
 	}
+
 	return new(big.Int).SetBytes(tokenIndexBytes).Uint64(), nil
 }
 

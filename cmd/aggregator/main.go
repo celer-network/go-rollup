@@ -11,8 +11,7 @@ import (
 
 var (
 	config            = flag.String("config", "/tmp/celer_rollup_test/config", "Config directory")
-	mainDbDir         = flag.String("maindb", "/tmp/celer_rollup_test/maindb", "Main DB directory")
-	treeDbDir         = flag.String("treedb", "/tmp/celer_rollup_test/treedb", "Tree DB directory")
+	mainDbDir         = flag.String("maindb", "/tmp/celer_rollup_test/db", "Main DB directory")
 	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/aggregator.json", "Mainchain keystore file")
 )
 
@@ -28,7 +27,7 @@ func main() {
 	viper.MergeInConfig()
 	viper.SetConfigName("sidechain_contract_addresses")
 	viper.MergeInConfig()
-	aggregator, err := aggregator.NewAggregator(*mainDbDir, *treeDbDir, *mainchainKeystore)
+	aggregator, err := aggregator.NewAggregator(*mainDbDir, *mainchainKeystore)
 	if err != nil {
 		os.Exit(1)
 	}

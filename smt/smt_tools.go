@@ -1,15 +1,12 @@
-/**
- *  @file
- *  @copyright defined in aergo/LICENSE.txt
- */
-
 package smt
 
-// The Package Trie implements a sparse merkle trie.
+// The Package Trie implements a sparse Merkle trie.
 
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/celer-network/go-rollup/db"
 )
 
 // Get fetches the value of a key by going down the current trie root.
@@ -51,14 +48,20 @@ func (s *SMT) DefaultHash(height int) []byte {
 }
 
 // CheckRoot returns true if the root exists in Database.
-func (s *SMT) CheckRoot(root []byte) bool {
+func (s *SMT) CheckRoot(root []byte) (bool, error) {
 	s.db.lock.RLock()
-	dbval := s.db.store.Get(root)
+	dbval, exists, err := s.db.store.Get(db.NamespaceSMT, root)
 	s.db.lock.RUnlock()
-	if len(dbval) != 0 {
-		return true
+	if err != nil {
+		return false, err
 	}
-	return false
+	if !exists {
+		return false, nil
+	}
+	if len(dbval) != 0 {
+		return true, nil
+	}
+	return false, nil
 }
 
 // Commit stores the updated nodes to disk
@@ -78,7 +81,10 @@ func (s *SMT) Commit() error {
 			s.pastTries = append(s.pastTries, s.Root)
 		}
 	}
-	s.db.commit()
+	err := s.db.commit()
+	if err != nil {
+		return err
+	}
 	s.db.updatedNodes = make(map[Hash][][]byte)
 	s.prevRoot = s.Root
 	return nil

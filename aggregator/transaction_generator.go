@@ -1,7 +1,7 @@
 package aggregator
 
 import (
-	"github.com/celer-network/go-rollup/storage"
+	"github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/types"
 	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
 	"github.com/celer-network/sidechain-contracts/bindings/go/sidechain"
@@ -17,7 +17,7 @@ const (
 )
 
 type TransactionGenerator struct {
-	storage             *storage.Storage
+	db                  *db.DB
 	sidechainClient     *ethclient.Client
 	rollupChain         *rollup.RollupChain
 	rollupTokenRegistry *rollup.RollupTokenRegistry
@@ -26,7 +26,7 @@ type TransactionGenerator struct {
 }
 
 func NewTransactionGenerator(
-	storage *storage.Storage,
+	db *db.DB,
 	mainchainClient *ethclient.Client,
 	rollupChain *rollup.RollupChain,
 ) *TransactionGenerator {
@@ -49,7 +49,7 @@ func NewTransactionGenerator(
 	}
 
 	return &TransactionGenerator{
-		storage:             storage,
+		db:                  db,
 		sidechainClient:     sidechainClient,
 		rollupChain:         rollupChain,
 		rollupTokenRegistry: rollupTokenRegistry,
@@ -75,10 +75,14 @@ func (tg *TransactionGenerator) watchRollupTokenRegistry() error {
 		select {
 		case event := <-channel:
 			log.Printf("Registered token %s as %s", event.TokenAddress.Hex(), event.TokenIndex.String())
-			tg.storage.Set(
-				storage.NamespaceTokenAddressToTokenIndex,
+			err := tg.db.Set(
+				db.NamespaceTokenAddressToTokenIndex,
 				event.TokenAddress.Bytes(),
-				event.TokenIndex.Bytes())
+				event.TokenIndex.Bytes(),
+			)
+			if err != nil {
+				log.Err(err).Send()
+			}
 		case err := <-sub.Err():
 			log.Err(err).Send()
 			return err
@@ -97,10 +101,13 @@ func (tg *TransactionGenerator) watchTokenMapper() error {
 		case event := <-channel:
 			sidechainErc20Address := event.SidechainToken
 			log.Printf("Mapped token %s to %s", event.MainchainToken.Hex(), event.SidechainToken.Hex())
-			tg.storage.Set(
-				storage.NamespaceMainchainTokenAddressToSidechainTokenAddress,
+			err := tg.db.Set(
+				db.NamespaceMainchainTokenAddressToSidechainTokenAddress,
 				event.MainchainToken.Bytes(),
 				sidechainErc20Address.Bytes())
+			if err != nil {
+				log.Err(err).Send()
+			}
 			sidechainErc20, err := sidechain.NewSidechainERC20(sidechainErc20Address, tg.sidechainClient)
 			if err != nil {
 				return err

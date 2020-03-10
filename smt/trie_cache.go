@@ -1,15 +1,9 @@
-/**
- *  @file
- *  @copyright defined in aergo/LICENSE.txt
- */
-
 package smt
 
 import (
-	//"fmt"
 	"sync"
 
-	"github.com/aergoio/aergo-lib/db"
+	rollupdb "github.com/celer-network/go-rollup/db"
 )
 
 type CacheDB struct {
@@ -28,11 +22,11 @@ type CacheDB struct {
 	// lock for CacheDB
 	lock sync.RWMutex
 	// store is the interface to disk db
-	store db.DB
+	store *rollupdb.DB
 }
 
 // commit stores the updated nodes to disk.
-func (db *CacheDB) commit() {
+func (db *CacheDB) commit() error {
 	db.updatedMux.Lock()
 	defer db.updatedMux.Unlock()
 	txn := db.store.NewTx()
@@ -40,10 +34,13 @@ func (db *CacheDB) commit() {
 	for key, batch := range db.updatedNodes {
 		//node := key
 		var node []byte
-		txn.Set(append(node, key[:]...), db.serializeBatch(batch))
+		err := txn.Set(rollupdb.NamespaceSMT, append(node, key[:]...), db.serializeBatch(batch))
+		if err != nil {
+			return err
+		}
 		//txn.Set(node[:], db.serializeBatch(batch))
 	}
-	txn.Commit()
+	return txn.Commit()
 }
 
 func (db *CacheDB) serializeBatch(batch [][]byte) []byte {

@@ -1,8 +1,3 @@
-/**
- *  @file
- *  @copyright defined in aergo/LICENSE.txt
- */
-
 package smt
 
 import (

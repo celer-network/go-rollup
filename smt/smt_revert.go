@@ -1,13 +1,10 @@
-/**
- *  @file
- *  @copyright defined in aergo/LICENSE.txt
- */
-
 package smt
 
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/celer-network/go-rollup/db"
 )
 
 // Revert rewinds the state tree to a previous version
@@ -46,7 +43,7 @@ func (s *SMT) Revert(toOldRoot []byte) error {
 	txn := s.db.store.NewTx()
 	//for _, key := range toBeDeleted {
 	for _, key := range s.db.nodesToRevert {
-		txn.Delete(key[:HashLength])
+		txn.Delete(db.NamespaceSMT, key[:HashLength])
 	}
 	txn.Commit()
 
