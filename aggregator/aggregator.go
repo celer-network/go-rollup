@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"errors"
 	"io/ioutil"
 	"math/big"
 
@@ -18,12 +19,11 @@ import (
 )
 
 type Aggregator struct {
-	stateMachine             *statemachine.StateMachine
-	pendingBlock             *types.RollupBlock
-	txGenerator              *TransactionGenerator
-	blockSubmitter           *BlockSubmitter
-	tokenAddressToTokenIndex map[string]*big.Int
-
+	db                    *db.DB
+	stateMachine          *statemachine.StateMachine
+	pendingBlock          *types.RollupBlock
+	txGenerator           *TransactionGenerator
+	blockSubmitter        *BlockSubmitter
 	numTransitionsInBlock int
 }
 
@@ -63,6 +63,7 @@ func NewAggregator(dbDir string, mainchainKeystore string) (*Aggregator, error) 
 	}
 
 	return &Aggregator{
+		db:             db,
 		stateMachine:   statemachine.NewStateMachine(db, serializer),
 		txGenerator:    NewTransactionGenerator(db, mainchainClient, rollupChain),
 		blockSubmitter: NewBlockSubmitter(mainchainClient, mainchainAuth, serializer, rollupChain),
@@ -89,18 +90,23 @@ func (a *Aggregator) applyTransaction(signedTransaction *types.SignedTransaction
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Adding to pending block %s", signedTransaction.Transaction.GetTransactionType())
+	log.Printf("Adding to pending block %d", signedTransaction.Transaction.GetTransactionType())
 	err = a.addToPendingBlock(stateUpdate, signedTransaction)
 	if err != nil {
 		return nil, err
 	}
 
+	log.Debug().Int("numPendingTxn", len(a.pendingBlock.Transitions)).Int("numTxnInBlock", a.numTransitionsInBlock).Send()
 	if len(a.pendingBlock.Transitions) >= a.numTransitionsInBlock {
-		a.blockSubmitter.submitBlock(a.pendingBlock)
+		submitErr := a.blockSubmitter.submitBlock(a.pendingBlock)
+		if submitErr != nil {
+			log.Err(submitErr).Msg("Submit error")
+			return nil, submitErr
+		}
 		a.pendingBlock = types.NewRollupBlock(a.pendingBlock.BlockNumber + 1)
 	}
 
-	// TODO: Generate receipt and submit block
+	// TODO: Generate receipt?
 	return nil, nil
 }
 
@@ -111,14 +117,22 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 		depositTx := tx.(*types.DepositTransaction)
 		entry := stateUpdate.Entries[0]
 		info := entry.AccountInfo
+		tokenIndex, exists, err := a.db.Get(db.NamespaceTokenAddressToTokenIndex, depositTx.Token.Bytes())
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.New("Invalid token")
+		}
 		if entry.NewAccount {
 			a.pendingBlock.Transitions = append(
 				a.pendingBlock.Transitions,
 				&types.InitialDepositTransition{
+					TransitionType:   big.NewInt(int64(types.TransitionTypeInitialDeposit)),
 					StateRoot:        stateUpdate.StateRoot,
 					AccountSlotIndex: entry.SlotIndex,
 					Account:          info.Account,
-					TokenIndex:       a.tokenAddressToTokenIndex[depositTx.Token.Hex()],
+					TokenIndex:       new(big.Int).SetBytes(tokenIndex),
 					Amount:           depositTx.Amount,
 					Signature:        signedTx.Signature,
 				})
@@ -126,37 +140,53 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 			a.pendingBlock.Transitions = append(
 				a.pendingBlock.Transitions,
 				&types.DepositTransition{
+					TransitionType:   big.NewInt(int64(types.TransitionTypeDeposit)),
 					StateRoot:        stateUpdate.StateRoot,
 					AccountSlotIndex: entry.SlotIndex,
-					TokenIndex:       a.tokenAddressToTokenIndex[depositTx.Token.Hex()],
+					TokenIndex:       new(big.Int).SetBytes(tokenIndex),
 					Amount:           depositTx.Amount,
 					Signature:        signedTx.Signature,
 				})
 
 		}
-
 	case types.TransactionTypeWithdraw:
 		entry := stateUpdate.Entries[0]
 		withdrawTx := tx.(*types.WithdrawTransaction)
+		tokenIndex, exists, err := a.db.Get(db.NamespaceTokenAddressToTokenIndex, withdrawTx.Token.Bytes())
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.New("Invalid token")
+		}
 		a.pendingBlock.Transitions = append(
 			a.pendingBlock.Transitions,
 			&types.WithdrawTransition{
+				TransitionType:   big.NewInt(int64(types.TransitionTypeWithdraw)),
 				StateRoot:        stateUpdate.StateRoot,
 				AccountSlotIndex: entry.SlotIndex,
-				TokenIndex:       a.tokenAddressToTokenIndex[withdrawTx.Token.Hex()],
+				TokenIndex:       new(big.Int).SetBytes(tokenIndex),
 				Amount:           withdrawTx.Amount,
 				Signature:        signedTx.Signature,
 			})
 	case types.TransactionTypeTransfer:
 		entries := stateUpdate.Entries
 		transferTx := tx.(*types.TransferTransaction)
+		tokenIndex, exists, err := a.db.Get(db.NamespaceTokenAddressToTokenIndex, transferTx.Token.Bytes())
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return errors.New("Invalid token")
+		}
 		a.pendingBlock.Transitions = append(
 			a.pendingBlock.Transitions,
 			&types.TransferTransition{
+				TransitionType:     big.NewInt(int64(types.TransitionTypeTransfer)),
 				StateRoot:          stateUpdate.StateRoot,
 				SenderSlotIndex:    entries[0].SlotIndex,
 				RecipientSlotIndex: entries[1].SlotIndex,
-				TokenIndex:         a.tokenAddressToTokenIndex[transferTx.Token.Hex()],
+				TokenIndex:         new(big.Int).SetBytes(tokenIndex),
 				Amount:             transferTx.Amount,
 				Nonce:              transferTx.Nonce,
 				Signature:          signedTx.Signature,

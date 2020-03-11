@@ -9,18 +9,18 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/celer-network/go-rollup/db"
-	"github.com/celer-network/go-rollup/smt"
+	"github.com/celer-network/go-rollup/trie"
 	"github.com/celer-network/go-rollup/types"
 )
 
-var errAccountNotFound = errors.New("Account not found")
+var (
+	errAccountNotFound = errors.New("Account not found")
+)
 
 type StateMachine struct {
-	db           *db.DB
-	tree         *smt.SMT
-	serializer   *types.Serializer
-	addressToKey map[string][]byte
-	lastKey      *big.Int
+	db         *db.DB
+	trie       *trie.Trie
+	serializer *types.Serializer
 }
 
 func NewStateMachine(db *db.DB, serializer *types.Serializer) *StateMachine {
@@ -28,9 +28,8 @@ func NewStateMachine(db *db.DB, serializer *types.Serializer) *StateMachine {
 
 	return &StateMachine{
 		db:         db,
-		tree:       smt.NewSMT(nil, smt.Hasher, db),
+		trie:       trie.NewTrie(nil, trie.Hasher, db),
 		serializer: serializer,
-		lastKey:    big.NewInt(-1),
 	}
 }
 
@@ -43,34 +42,41 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 	case types.TransactionTypeDeposit:
 		accountInfoUpdates, err = sm.applyDeposit(tx.(*types.DepositTransaction))
 		if err != nil {
-			log.Err(err).Send()
+			log.Err(err).Stack().Send()
 			return nil, err
 		}
 	case types.TransactionTypeWithdraw:
 		accountInfoUpdates, err = sm.applyWithdraw(tx.(*types.WithdrawTransaction))
 		if err != nil {
-			log.Err(err).Send()
+			log.Err(err).Stack().Send()
 			return nil, err
 		}
 	case types.TransactionTypeTransfer:
 		accountInfoUpdates, err = sm.applyTransfer(tx.(*types.TransferTransaction))
 		if err != nil {
-			log.Err(err).Send()
+			log.Err(err).Stack().Send()
 			return nil, err
 		}
 	}
 	var entries []*types.StateUpdateEntry
 	for _, update := range accountInfoUpdates {
 		info := update.Info
+		account := info.Account
 		newAccount := update.NewAccount
-		key := sm.addressToKey[info.Account.Hex()]
-		proof, proofErr := sm.tree.MerkleProof(key)
+		key, exists, err := sm.db.Get(db.NamespaceAccountAddressToKey, account.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, errAccountNotFound
+		}
+		proof, _, _, _, proofErr := sm.trie.MerkleProof(trie.Hasher(key))
 		if proofErr != nil {
 			log.Err(proofErr).Send()
 			return nil, err
 		}
 		entries = append(entries, &types.StateUpdateEntry{
-			SlotIndex:      new(big.Int).SetBytes(sm.addressToKey[info.Account.Hex()]),
+			SlotIndex:      new(big.Int).SetBytes(key),
 			InclusionProof: proof,
 			AccountInfo:    info,
 			NewAccount:     newAccount,
@@ -78,7 +84,7 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 	}
 	return &types.StateUpdate{
 		Transaction: signedTx,
-		StateRoot:   sm.tree.Root,
+		StateRoot:   sm.trie.Root,
 		Entries:     entries,
 	}, nil
 
@@ -101,10 +107,10 @@ func (sm *StateMachine) applyDeposit(tx *types.DepositTransaction) ([]*types.Acc
 	newAccount := false
 	if err != nil {
 		if errors.Is(err, errAccountNotFound) {
-			accountInfo = &types.AccountInfo{
-				Account:  account,
-				Balances: make([]*big.Int, tokenIndex+1),
-				Nonces:   make([]*big.Int, tokenIndex+1),
+			var createErr error
+			accountInfo, createErr = sm.createAccount(account, tokenIndex+1)
+			if createErr != nil {
+				return nil, err
 			}
 			newAccount = true
 		} else {
@@ -122,6 +128,10 @@ func (sm *StateMachine) applyDeposit(tx *types.DepositTransaction) ([]*types.Acc
 		Account:  account,
 		Balances: balances,
 		Nonces:   nonces,
+	}
+	err = sm.setAccountInfo(account, updatedAccount)
+	if err != nil {
+		return nil, err
 	}
 	return []*types.AccountInfoUpdate{
 		&types.AccountInfoUpdate{
@@ -163,6 +173,10 @@ func (sm *StateMachine) applyWithdraw(tx *types.WithdrawTransaction) ([]*types.A
 		Balances: accountInfo.Balances,
 		Nonces:   accountInfo.Nonces,
 	}
+	err = sm.setAccountInfo(account, updatedAccount)
+	if err != nil {
+		return nil, err
+	}
 	return []*types.AccountInfoUpdate{
 		&types.AccountInfoUpdate{
 			Info:       updatedAccount,
@@ -195,8 +209,9 @@ func (sm *StateMachine) applyTransfer(tx *types.TransferTransaction) ([]*types.A
 	senderBalances := senderAccountInfo.Balances
 	senderNonces := senderAccountInfo.Nonces
 	tokenIndexInt := int(tokenIndex)
+	log.Debug().Int("senderBalancesLength", len(senderBalances)).Interface("senderBalances", senderBalances).Send()
 	if tokenIndexInt > len(senderBalances) {
-		return nil, errors.New("Insufficient balance")
+		return nil, errors.New("Sender no such token")
 	}
 
 	nonce := senderNonces[tokenIndex]
@@ -231,7 +246,7 @@ func (sm *StateMachine) applyTransfer(tx *types.TransferTransaction) ([]*types.A
 	if err != nil {
 		return nil, err
 	}
-	err = sm.setAccountInfo(sender, updatedSender)
+	err = sm.setAccountInfo(recipient, updatedRecipient)
 	if err != nil {
 		return nil, err
 	}
@@ -248,22 +263,80 @@ func (sm *StateMachine) applyTransfer(tx *types.TransferTransaction) ([]*types.A
 	}, nil
 }
 
-func (sm *StateMachine) createAccountKey(address common.Address) []byte {
-	newKey := sm.lastKey.Add(sm.lastKey, big.NewInt(1))
-	newKeyBytes := newKey.Bytes()
-	sm.addressToKey[address.Hex()] = newKeyBytes
-	return newKeyBytes
-}
-
-func (sm *StateMachine) getAccountInfo(address common.Address) (*types.AccountInfo, error) {
-	key, exists := sm.addressToKey[address.Hex()]
-	if !exists {
-		return nil, errors.New("Account not found")
+func (sm *StateMachine) createAccount(address common.Address, numTokens uint64) (*types.AccountInfo, error) {
+	balances := make([]*big.Int, numTokens)
+	for i := 0; i < len(balances); i++ {
+		balances[i] = big.NewInt(0)
 	}
-	data, err := sm.tree.Get(key)
+	nonces := make([]*big.Int, numTokens)
+	for i := 0; i < len(nonces); i++ {
+		nonces[i] = big.NewInt(0)
+	}
+	accountInfo := &types.AccountInfo{
+		Account:  address,
+		Balances: balances,
+		Nonces:   nonces,
+	}
+	lastKeyBytes, exists, err := sm.db.Get(db.NamespaceLastKey, db.EmptyKey)
 	if err != nil {
 		return nil, err
 	}
+	var lastKey *big.Int
+	if !exists {
+		lastKey = big.NewInt(-1)
+	} else {
+		lastKey = new(big.Int).SetBytes(lastKeyBytes)
+	}
+	newKey := lastKey.Add(lastKey, big.NewInt(1))
+	newKeyBytes := newKey.Bytes()
+	data, err := accountInfo.Serialize(sm.serializer)
+	// log.Log().Int("data length", len(data)).Send()
+	// log.Log().Bytes("data", data).Err(err).Msg("createAccount")
+	tx := sm.db.NewTx()
+	err = tx.Set(db.NamespaceLastKey, db.EmptyKey, lastKey.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	err = tx.Set(db.NamespaceAccountAddressToKey, address.Bytes(), newKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+	err = tx.Set(db.NamespaceKeyToAccountInfo, newKeyBytes, data)
+	if err != nil {
+		return nil, err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+	_, err = sm.trie.Update([][]byte{trie.Hasher(newKeyBytes)}, [][]byte{trie.Hasher(data)})
+	if err != nil {
+		return nil, err
+	}
+	err = sm.trie.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	return accountInfo, nil
+}
+
+func (sm *StateMachine) getAccountInfo(address common.Address) (*types.AccountInfo, error) {
+	key, exists, err := sm.db.Get(db.NamespaceAccountAddressToKey, address.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errAccountNotFound
+	}
+	data, exists, err := sm.db.Get(db.NamespaceKeyToAccountInfo, key)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.New("Corrupt db")
+	}
+	log.Log().Bytes("data", data).Msg("getAccountInfo")
 	info, err := sm.serializer.DeserializeAccountInfo(data)
 	if err != nil {
 		return nil, err
@@ -276,12 +349,24 @@ func (sm *StateMachine) setAccountInfo(address common.Address, info *types.Accou
 	if err != nil {
 		return err
 	}
-	key := sm.addressToKey[address.Hex()]
-	_, err = sm.tree.Update([][]byte{key}, [][]byte{data})
+	key, exists, err := sm.db.Get(db.NamespaceAccountAddressToKey, address.Bytes())
 	if err != nil {
 		return err
 	}
-	return sm.tree.Commit()
+	if !exists {
+		return errAccountNotFound
+	}
+	keyHash := trie.Hasher(key)
+	dataHash := trie.Hasher(data)
+	err = sm.db.Set(db.NamespaceKeyToAccountInfo, key, data)
+	if err != nil {
+		return err
+	}
+	_, err = sm.trie.Update([][]byte{keyHash}, [][]byte{dataHash})
+	if err != nil {
+		return err
+	}
+	return sm.trie.Commit()
 }
 
 func (sm *StateMachine) getTokenIndex(tokenAddress common.Address) (uint64, error) {

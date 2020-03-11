@@ -1,7 +1,9 @@
 package types
 
 import (
+	"fmt"
 	"math/big"
+	"runtime/debug"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -22,22 +24,23 @@ func createAccountInfoArguments(r *typeRegistry) abi.Arguments {
 }
 
 func (info *AccountInfo) Serialize(s *Serializer) ([]byte, error) {
-	return s.accountInfoArguments.Pack(
+	data, err := s.accountInfoArguments.Pack(
 		info.Account,
 		info.Balances,
 		info.Nonces,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("Serialize AccountInfo %v: %w", info, err)
+	}
+	return data, nil
 }
 
-func (s *Serializer) DeserializeAccountInfo(bytes []byte) (*AccountInfo, error) {
-	var infoMap map[string]interface{}
-	err := s.accountInfoArguments.UnpackIntoMap(infoMap, bytes)
+func (s *Serializer) DeserializeAccountInfo(data []byte) (*AccountInfo, error) {
+	var info AccountInfo
+	err := s.accountInfoArguments.Unpack(&info, data)
 	if err != nil {
-		return nil, err
+		debug.PrintStack()
+		return nil, fmt.Errorf("Deserialize AccountInfo, data %v: %w", data, err)
 	}
-	return &AccountInfo{
-		Account:  infoMap["account"].(common.Address),
-		Balances: infoMap["balances"].([]*big.Int),
-		Nonces:   infoMap["nonces"].([]*big.Int),
-	}, nil
+	return &info, nil
 }

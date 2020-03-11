@@ -22,6 +22,7 @@ type Transition interface {
 }
 
 type InitialDepositTransition struct {
+	TransitionType   *big.Int
 	StateRoot        []byte
 	AccountSlotIndex *big.Int
 	Account          common.Address
@@ -47,9 +48,11 @@ func createInitialDepositTransitionArguments(r *typeRegistry) abi.Arguments {
 }
 
 func (transition *InitialDepositTransition) Serialize(s *Serializer) ([]byte, error) {
+	var stateRoot [32]byte
+	copy(stateRoot[:], transition.StateRoot)
 	return s.initialDepositTransitionArguments.Pack(
-		transition.GetTransitionType(),
-		transition.StateRoot,
+		transition.TransitionType,
+		stateRoot,
 		transition.AccountSlotIndex,
 		transition.Account,
 		transition.TokenIndex,
@@ -59,6 +62,7 @@ func (transition *InitialDepositTransition) Serialize(s *Serializer) ([]byte, er
 }
 
 type DepositTransition struct {
+	TransitionType   *big.Int
 	StateRoot        []byte
 	AccountSlotIndex *big.Int
 	TokenIndex       *big.Int
@@ -82,9 +86,11 @@ func createDepositTransitionArguments(r *typeRegistry) abi.Arguments {
 }
 
 func (transition *DepositTransition) Serialize(s *Serializer) ([]byte, error) {
+	var stateRoot [32]byte
+	copy(stateRoot[:], transition.StateRoot)
 	return s.depositTransitionArguments.Pack(
-		transition.GetTransitionType(),
-		transition.StateRoot,
+		transition.TransitionType,
+		stateRoot,
 		transition.AccountSlotIndex,
 		transition.TokenIndex,
 		transition.Amount,
@@ -93,6 +99,7 @@ func (transition *DepositTransition) Serialize(s *Serializer) ([]byte, error) {
 }
 
 type WithdrawTransition struct {
+	TransitionType   *big.Int
 	StateRoot        []byte
 	AccountSlotIndex *big.Int
 	TokenIndex       *big.Int
@@ -116,9 +123,11 @@ func createWithdrawTransitionArguments(r *typeRegistry) abi.Arguments {
 }
 
 func (transition *WithdrawTransition) Serialize(s *Serializer) ([]byte, error) {
-	return s.depositTransitionArguments.Pack(
-		transition.GetTransitionType(),
-		transition.StateRoot,
+	var stateRoot [32]byte
+	copy(stateRoot[:], transition.StateRoot)
+	return s.withdrawTransitionArguments.Pack(
+		transition.TransitionType,
+		stateRoot,
 		transition.AccountSlotIndex,
 		transition.TokenIndex,
 		transition.Amount,
@@ -127,6 +136,7 @@ func (transition *WithdrawTransition) Serialize(s *Serializer) ([]byte, error) {
 }
 
 type TransferTransition struct {
+	TransitionType     *big.Int
 	StateRoot          []byte
 	SenderSlotIndex    *big.Int
 	RecipientSlotIndex *big.Int
@@ -154,9 +164,11 @@ func createTransferTransitionArguments(r *typeRegistry) abi.Arguments {
 }
 
 func (transition *TransferTransition) Serialize(s *Serializer) ([]byte, error) {
-	return s.depositTransitionArguments.Pack(
-		transition.GetTransitionType(),
-		transition.StateRoot,
+	var stateRoot [32]byte
+	copy(stateRoot[:], transition.StateRoot)
+	return s.transferTransitionArguments.Pack(
+		transition.TransitionType,
+		stateRoot,
 		transition.SenderSlotIndex,
 		transition.RecipientSlotIndex,
 		transition.TokenIndex,

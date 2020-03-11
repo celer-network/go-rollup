@@ -4,7 +4,10 @@ import (
 	"flag"
 	"os"
 
+	"github.com/rs/zerolog/pkgerrors"
+
 	"github.com/celer-network/go-rollup/aggregator"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
@@ -18,6 +21,7 @@ var (
 func main() {
 	flag.Parse()
 	log.Logger = log.With().Caller().Logger()
+	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 	viper.AddConfigPath(*config)
 	viper.SetConfigName("parameters")
 	viper.MergeInConfig()

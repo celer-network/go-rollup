@@ -46,7 +46,7 @@ const (
 	testRootDir                  = "/tmp/celer_rollup_test"
 	mainchainEthEndpoint         = "ws://127.0.0.1:8546"
 	sidechainEthEndpoint         = "ws://127.0.0.1:8548"
-	aggregatorAddressStr         = "0xba756d65a1a03f07d205749f35e2406e4a8522ad"
+	aggregatorAddressStr         = "0x6a6d2a97da1c453a4e099e8054865a0a59728863"
 	mainchainEtherbaseKeystore   = "env/keystore/mainchain_etherbase.json"
 	sidechainEtherbaseKeystore   = "env/keystore/sidechain_etherbase.json"
 	aggregatorKeystore           = "env/aggregator.json"

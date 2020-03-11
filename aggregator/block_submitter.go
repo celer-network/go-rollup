@@ -39,7 +39,7 @@ func (bs *BlockSubmitter) submitBlock(pendingBlock *types.RollupBlock) error {
 		return err
 	}
 	log.Print("Submitting block ", pendingBlock.BlockNumber)
-	tx, err := bs.rollupChain.SubmitBlock(&bind.TransactOpts{}, serializedBlock)
+	tx, err := bs.rollupChain.SubmitBlock(bs.mainchainAuth, serializedBlock)
 	if err != nil {
 		return err
 	}

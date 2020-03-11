@@ -1,9 +1,9 @@
-package smt
+package trie
 
 import (
 	"sync"
 
-	rollupdb "github.com/celer-network/go-rollup/db"
+	"github.com/celer-network/go-rollup/db"
 )
 
 type CacheDB struct {
@@ -22,28 +22,25 @@ type CacheDB struct {
 	// lock for CacheDB
 	lock sync.RWMutex
 	// store is the interface to disk db
-	store *rollupdb.DB
+	Store *db.DB
 }
 
-// commit stores the updated nodes to disk.
-func (db *CacheDB) commit() error {
-	db.updatedMux.Lock()
-	defer db.updatedMux.Unlock()
-	txn := db.store.NewTx()
-	// NOTE The tx interface doesnt handle ErrTxnTooBig
-	for key, batch := range db.updatedNodes {
-		//node := key
+// commit adds updatedNodes to the given database transaction.
+func (c *CacheDB) commit(txn *db.Transaction) error {
+	c.updatedMux.Lock()
+	defer c.updatedMux.Unlock()
+	for key, batch := range c.updatedNodes {
 		var node []byte
-		err := txn.Set(rollupdb.NamespaceSMT, append(node, key[:]...), db.serializeBatch(batch))
+		err := txn.Set(db.NamespaceTrie, append(node, key[:]...), c.serializeBatch(batch))
 		if err != nil {
 			return err
 		}
-		//txn.Set(node[:], db.serializeBatch(batch))
 	}
-	return txn.Commit()
+	return nil
 }
 
-func (db *CacheDB) serializeBatch(batch [][]byte) []byte {
+// serializeBatch serialises the 2D [][]byte into a []byte for db
+func (c *CacheDB) serializeBatch(batch [][]byte) []byte {
 	serialized := make([]byte, 4) //, 30*33)
 	if batch[0][0] == 1 {
 		// the batch node is a shortcut
