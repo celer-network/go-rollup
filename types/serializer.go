@@ -9,10 +9,16 @@ type Serializer struct {
 	depositTransitionArguments        abi.Arguments
 	withdrawTransitionArguments       abi.Arguments
 	transferTransitionArguments       abi.Arguments
+
+	storageSlotArguments abi.Arguments
 }
 
 func NewSerializer() (*Serializer, error) {
 	typeRegistry, err := newTypeRegistry()
+	if err != nil {
+		return nil, err
+	}
+	storageSlotArguments, err := createStorageSlotArguments(typeRegistry)
 	if err != nil {
 		return nil, err
 	}
@@ -23,5 +29,7 @@ func NewSerializer() (*Serializer, error) {
 		depositTransitionArguments:        createDepositTransitionArguments(typeRegistry),
 		withdrawTransitionArguments:       createWithdrawTransitionArguments(typeRegistry),
 		transferTransitionArguments:       createTransferTransitionArguments(typeRegistry),
+
+		storageSlotArguments: storageSlotArguments,
 	}, nil
 }

@@ -1,8 +1,9 @@
-package db
+package badgerdb
 
 import (
 	"time"
 
+	rollupdb "github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/log"
 	"github.com/dgraph-io/badger/v2"
 )
@@ -19,9 +20,9 @@ type Transaction struct {
 
 func (transaction *Transaction) Set(namespace []byte, key []byte, value []byte) error {
 	// TODO Updating trie nodes may require many updates but ErrTxnTooBig is not handled
-	key = prependNamespace(namespace, key)
-	key = convNilToBytes(key)
-	value = convNilToBytes(value)
+	key = rollupdb.PrependNamespace(namespace, key)
+	key = rollupdb.ConvNilToBytes(key)
+	value = rollupdb.ConvNilToBytes(value)
 
 	err := transaction.tx.Set(key, value)
 	if err != nil {
@@ -36,8 +37,8 @@ func (transaction *Transaction) Set(namespace []byte, key []byte, value []byte) 
 
 func (transaction *Transaction) Delete(namespace []byte, key []byte) error {
 	// TODO Reverting trie may require many updates but ErrTxnTooBig is not handled
-	key = prependNamespace(namespace, key)
-	key = convNilToBytes(key)
+	key = rollupdb.PrependNamespace(namespace, key)
+	key = rollupdb.ConvNilToBytes(key)
 
 	err := transaction.tx.Delete(key)
 	if err != nil {

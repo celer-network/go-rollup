@@ -1,7 +1,9 @@
-package db
+package badgerdb
 
 import (
 	"time"
+
+	"github.com/celer-network/go-rollup/db"
 
 	"github.com/celer-network/go-rollup/log"
 	"github.com/dgraph-io/badger/v2"
@@ -19,9 +21,9 @@ type Bulk struct {
 
 func (bulk *Bulk) Set(namespace []byte, key []byte, value []byte) error {
 	// TODO Updating trie nodes may require many updates but ErrTxnTooBig is not handled
-	key = prependNamespace(namespace, key)
-	key = convNilToBytes(key)
-	value = convNilToBytes(value)
+	key = db.PrependNamespace(namespace, key)
+	key = db.ConvNilToBytes(key)
+	value = db.ConvNilToBytes(value)
 
 	err := bulk.bulk.Set(key, value)
 	if err != nil {
@@ -36,8 +38,8 @@ func (bulk *Bulk) Set(namespace []byte, key []byte, value []byte) error {
 
 func (bulk *Bulk) Delete(namespace []byte, key []byte) error {
 	// TODO Reverting trie may require many updates but ErrTxnTooBig is not handled
-	key = prependNamespace(namespace, key)
-	key = convNilToBytes(key)
+	key = db.PrependNamespace(namespace, key)
+	key = db.ConvNilToBytes(key)
 
 	err := bulk.bulk.Delete(key)
 	if err != nil {

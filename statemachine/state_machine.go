@@ -5,32 +5,39 @@ import (
 	"math/big"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/crypto/sha3"
 
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/celer-network/go-rollup/db"
-	"github.com/celer-network/go-rollup/trie"
+	"github.com/celer-network/go-rollup/smt"
 	"github.com/celer-network/go-rollup/types"
 )
+
+const stateTreeHeight = 160
 
 var (
 	errAccountNotFound = errors.New("Account not found")
 )
 
 type StateMachine struct {
-	db         *db.DB
-	trie       *trie.Trie
+	db         db.DB
+	smt        *smt.SparseMerkleTree
 	serializer *types.Serializer
 }
 
-func NewStateMachine(db *db.DB, serializer *types.Serializer) *StateMachine {
+func NewStateMachine(db db.DB, serializer *types.Serializer) (*StateMachine, error) {
 	// TODO: restore from db
 
+	smt, err := smt.NewSparseMerkleTree(db, sha3.NewLegacyKeccak256(), nil, stateTreeHeight, false)
+	if err != nil {
+		return nil, err
+	}
 	return &StateMachine{
 		db:         db,
-		trie:       trie.NewTrie(nil, trie.Hasher, db),
+		smt:        smt,
 		serializer: serializer,
-	}
+	}, nil
 }
 
 func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*types.StateUpdate, error) {
@@ -70,21 +77,22 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 		if !exists {
 			return nil, errAccountNotFound
 		}
-		proof, _, _, _, proofErr := sm.trie.MerkleProof(trie.Hasher(key))
+		proof, proofErr := sm.smt.Prove(key)
 		if proofErr != nil {
 			log.Err(proofErr).Send()
 			return nil, err
 		}
+		inclusionProof := types.ConvertToInclusionProof(proof)
 		entries = append(entries, &types.StateUpdateEntry{
 			SlotIndex:      new(big.Int).SetBytes(key),
-			InclusionProof: proof,
+			InclusionProof: inclusionProof,
 			AccountInfo:    info,
 			NewAccount:     newAccount,
 		})
 	}
 	return &types.StateUpdate{
 		Transaction: signedTx,
-		StateRoot:   sm.trie.Root,
+		StateRoot:   sm.smt.Root(),
 		Entries:     entries,
 	}, nil
 
@@ -309,11 +317,10 @@ func (sm *StateMachine) createAccount(address common.Address, numTokens uint64) 
 	if err != nil {
 		return nil, err
 	}
-	_, err = sm.trie.Update([][]byte{trie.Hasher(newKeyBytes)}, [][]byte{trie.Hasher(data)})
+	_, err = sm.smt.Update(newKeyBytes, data)
 	if err != nil {
 		return nil, err
 	}
-	err = sm.trie.Commit()
 	if err != nil {
 		return nil, err
 	}
@@ -356,17 +363,12 @@ func (sm *StateMachine) setAccountInfo(address common.Address, info *types.Accou
 	if !exists {
 		return errAccountNotFound
 	}
-	keyHash := trie.Hasher(key)
-	dataHash := trie.Hasher(data)
 	err = sm.db.Set(db.NamespaceKeyToAccountInfo, key, data)
 	if err != nil {
 		return err
 	}
-	_, err = sm.trie.Update([][]byte{keyHash}, [][]byte{dataHash})
-	if err != nil {
-		return err
-	}
-	return sm.trie.Commit()
+	_, err = sm.smt.Update(key, data)
+	return err
 }
 
 func (sm *StateMachine) getTokenIndex(tokenAddress common.Address) (uint64, error) {
@@ -383,6 +385,32 @@ func (sm *StateMachine) getTokenIndex(tokenAddress common.Address) (uint64, erro
 	}
 
 	return new(big.Int).SetBytes(tokenIndexBytes).Uint64(), nil
+}
+
+func (sm *StateMachine) GetStateSnapshot(key []byte) (*types.StateSnapshot, error) {
+	infoData, err := sm.smt.Get(key)
+	if err != nil {
+		return nil, err
+	}
+	proof, err := sm.smt.Prove(key)
+	if err != nil {
+		return nil, err
+	}
+	info, err := sm.serializer.DeserializeAccountInfo(infoData)
+	if err != nil {
+		return nil, err
+	}
+	inclusionProof := types.ConvertToInclusionProof(proof)
+	return &types.StateSnapshot{
+		AccountInfo:    info,
+		SlotIndex:      new(big.Int).SetBytes(key),
+		StateRoot:      sm.smt.Root(),
+		InclusionProof: inclusionProof,
+	}, nil
+}
+
+func (sm *StateMachine) GetStateRoot() []byte {
+	return sm.smt.Root()
 }
 
 func maybeExpandBalancesNonces(tokenIndex uint64, accountInfo *types.AccountInfo) ([]*big.Int, []*big.Int) {

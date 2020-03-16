@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/celer-network/go-rollup/db"
+	"github.com/celer-network/go-rollup/db/badgerdb"
 	"github.com/celer-network/go-rollup/statemachine"
 	"github.com/celer-network/go-rollup/types"
 	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
@@ -19,7 +20,7 @@ import (
 )
 
 type Aggregator struct {
-	db                    *db.DB
+	db                    db.DB
 	stateMachine          *statemachine.StateMachine
 	pendingBlock          *types.RollupBlock
 	txGenerator           *TransactionGenerator
@@ -28,7 +29,7 @@ type Aggregator struct {
 }
 
 func NewAggregator(dbDir string, mainchainKeystore string) (*Aggregator, error) {
-	db, err := db.NewDB(dbDir)
+	db, err := badgerdb.NewDB(dbDir)
 	if err != nil {
 		return nil, err
 	}
@@ -44,27 +45,37 @@ func NewAggregator(dbDir string, mainchainKeystore string) (*Aggregator, error) 
 	mainchainKeystoreBytes, err := ioutil.ReadFile(mainchainKeystore)
 	if err != nil {
 		log.Fatal().Err(err).Send()
+		return nil, err
 	}
 	key, err := keystore.DecryptKey(mainchainKeystoreBytes, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
+		return nil, err
 	}
 	mainchainAuth := bind.NewKeyedTransactor(key.PrivateKey)
 
 	mainchainClient, err := ethclient.Dial(viper.GetString("mainchainEndpoint"))
 	if err != nil {
 		log.Fatal().Err(err).Send()
+		return nil, err
 	}
 
 	rollupChainAddress := viper.GetString("rollupChain")
 	rollupChain, err := rollup.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
 	if err != nil {
 		log.Fatal().Err(err).Send()
+		return nil, err
+	}
+
+	stateMachine, err := statemachine.NewStateMachine(db, serializer)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+		return nil, err
 	}
 
 	return &Aggregator{
 		db:             db,
-		stateMachine:   statemachine.NewStateMachine(db, serializer),
+		stateMachine:   stateMachine,
 		txGenerator:    NewTransactionGenerator(db, mainchainClient, rollupChain),
 		blockSubmitter: NewBlockSubmitter(mainchainClient, mainchainAuth, serializer, rollupChain),
 

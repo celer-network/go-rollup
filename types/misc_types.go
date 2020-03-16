@@ -12,7 +12,7 @@ type AccountInfoUpdate struct {
 	NewAccount bool
 }
 
-type InclusionProof [][]byte
+type InclusionProof [][32]byte
 
 type StateUpdateEntry struct {
 	SlotIndex      *big.Int
@@ -25,4 +25,16 @@ type StateUpdate struct {
 	Transaction *SignedTransaction
 	StateRoot   []byte
 	Entries     []*StateUpdateEntry
+}
+
+type StateSnapshot struct {
+	SlotIndex      *big.Int
+	AccountInfo    *AccountInfo
+	StateRoot      []byte
+	InclusionProof InclusionProof
+}
+
+type TransitionPosition struct {
+	BlockNumber     uint64
+	TransitionIndex uint64
 }

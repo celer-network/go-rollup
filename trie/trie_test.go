@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"runtime"
 
+	"github.com/celer-network/go-rollup/db/badgerdb"
+
 	"os"
 	"path"
 	"time"
@@ -287,7 +289,7 @@ func TestTrieCommit(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		t.Fatal("failed to initialize db", err)
 	}
@@ -314,7 +316,7 @@ func TestTrieStageUpdates(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		t.Fatal("failed to initialize db", err)
 	}
@@ -343,7 +345,7 @@ func TestTrieRevert(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		t.Fatal("failed to initialize db", err)
 	}
@@ -466,7 +468,7 @@ func TestTrieRaisesError(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		t.Fatal("failed to initialize db", err)
 	}
@@ -519,7 +521,7 @@ func TestTrieLoadCache(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		t.Fatal("failed to initialize db", err)
 	}
@@ -623,7 +625,7 @@ func TestStash(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		t.Fatal("failed to initialize db", err)
 	}
@@ -717,7 +719,7 @@ func BenchmarkCacheHeightLimit233(b *testing.B) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		b.Fatal("failed to initialize db", err)
 	}
@@ -732,7 +734,7 @@ func BenchmarkCacheHeightLimit238(b *testing.B) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		b.Fatal("failed to initialize db", err)
 	}
@@ -747,7 +749,7 @@ func BenchmarkCacheHeightLimit245(b *testing.B) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		_ = os.MkdirAll(dbPath, 0711)
 	}
-	st, err := db.NewDB(dbPath)
+	st, err := badgerdb.NewDB(dbPath)
 	if err != nil {
 		b.Fatal("failed to initialize db", err)
 	}

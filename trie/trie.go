@@ -44,7 +44,7 @@ type Trie struct {
 }
 
 // NewTrie creates a new trie given a keySize and a hash function.
-func NewTrie(root []byte, hash func(data ...[]byte) []byte, store *db.DB) *Trie {
+func NewTrie(root []byte, hash func(data ...[]byte) []byte, store db.DB) *Trie {
 	s := &Trie{
 		hash:       hash,
 		TrieHeight: len(hash([]byte("height"))) * 8, // hash any string to get output length

@@ -1,4 +1,4 @@
-package db
+package badgerdb
 
 import (
 	"github.com/celer-network/go-rollup/log"

@@ -22,11 +22,11 @@ type CacheDB struct {
 	// lock for CacheDB
 	lock sync.RWMutex
 	// store is the interface to disk db
-	Store *db.DB
+	Store db.DB
 }
 
 // commit adds updatedNodes to the given database transaction.
-func (c *CacheDB) commit(txn *db.Transaction) error {
+func (c *CacheDB) commit(txn db.Transaction) error {
 	c.updatedMux.Lock()
 	defer c.updatedMux.Unlock()
 	for key, batch := range c.updatedNodes {

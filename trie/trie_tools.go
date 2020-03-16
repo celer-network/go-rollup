@@ -146,7 +146,7 @@ func (s *Trie) Commit() error {
 // Unlike Commit(), it doesnt commit the transaction
 // the database transaction MUST be commited otherwise the
 // state ROOT will not exist.
-func (s *Trie) StageUpdates(txn *db.Transaction) error {
+func (s *Trie) StageUpdates(txn db.Transaction) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	// Commit the new nodes to database, clear updatedNodes and store the Root in pastTries for reverts.

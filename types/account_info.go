@@ -23,6 +23,18 @@ func createAccountInfoArguments(r *typeRegistry) abi.Arguments {
 	})
 }
 
+func createAccountInfoArgumentMarshaling() []abi.ArgumentMarshaling {
+	return []abi.ArgumentMarshaling{
+		{Name: "account", Type: "address"},
+		{Name: "balances", Type: "uint256[]"},
+		{Name: "nonces", Type: "uint256[]"},
+	}
+}
+
+func createAccountInfoType(r *typeRegistry) (abi.Type, error) {
+	return abi.NewType("tuple", "", createAccountInfoArgumentMarshaling())
+}
+
 func (info *AccountInfo) Serialize(s *Serializer) ([]byte, error) {
 	data, err := s.accountInfoArguments.Pack(
 		info.Account,

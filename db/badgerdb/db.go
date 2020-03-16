@@ -1,9 +1,10 @@
-package db
+package badgerdb
 
 import (
 	"context"
 	"time"
 
+	rollupdb "github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/log"
 	"github.com/dgraph-io/badger/v2"
 	"github.com/dgraph-io/badger/v2/options"
@@ -28,17 +29,6 @@ func NewDB(dir string) (*DB, error) {
 	}
 
 	return db, nil
-}
-
-func prependNamespace(namespace []byte, key []byte) []byte {
-	return append(append(namespace, separator...), key...)
-}
-
-func convNilToBytes(byteArray []byte) []byte {
-	if byteArray == nil {
-		return []byte{}
-	}
-	return byteArray
 }
 
 func (db *DB) runBadgerGC() {
@@ -121,9 +111,8 @@ func newBadgerDB(dir string) (*DB, error) {
 	return database, nil
 }
 
-//=========================================================
-// DB Implementation
-//=========================================================
+// Enforce database and transaction implements interfaces
+var _ rollupdb.DB = (*DB)(nil)
 
 type DB struct {
 	db         *badger.DB
@@ -132,10 +121,14 @@ type DB struct {
 	name       string
 }
 
+func (db *DB) Type() string {
+	return "badgerdb"
+}
+
 func (db *DB) Set(namespace []byte, key []byte, value []byte) error {
-	key = prependNamespace(namespace, key)
-	key = convNilToBytes(key)
-	value = convNilToBytes(value)
+	key = rollupdb.PrependNamespace(namespace, key)
+	key = rollupdb.ConvNilToBytes(key)
+	value = rollupdb.ConvNilToBytes(value)
 
 	err := db.db.Update(func(txn *badger.Txn) error {
 		return txn.Set(key, value)
@@ -145,8 +138,8 @@ func (db *DB) Set(namespace []byte, key []byte, value []byte) error {
 }
 
 func (db *DB) Delete(namespace []byte, key []byte) error {
-	key = prependNamespace(namespace, key)
-	key = convNilToBytes(key)
+	key = rollupdb.PrependNamespace(namespace, key)
+	key = rollupdb.ConvNilToBytes(key)
 
 	err := db.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(key)
@@ -156,8 +149,8 @@ func (db *DB) Delete(namespace []byte, key []byte) error {
 }
 
 func (db *DB) Get(namespace []byte, key []byte) ([]byte, bool, error) {
-	key = prependNamespace(namespace, key)
-	key = convNilToBytes(key)
+	key = rollupdb.PrependNamespace(namespace, key)
+	key = rollupdb.ConvNilToBytes(key)
 
 	var val []byte
 	err := db.db.View(func(txn *badger.Txn) error {
@@ -187,9 +180,9 @@ func (db *DB) Get(namespace []byte, key []byte) ([]byte, bool, error) {
 	return val, true, nil
 }
 
-func (db *DB) Exist(namespace []byte, key []byte) bool {
-	key = prependNamespace(namespace, key)
-	key = convNilToBytes(key)
+func (db *DB) Exist(namespace []byte, key []byte) (bool, error) {
+	key = rollupdb.PrependNamespace(namespace, key)
+	key = rollupdb.ConvNilToBytes(key)
 
 	var isExist bool
 
@@ -207,11 +200,12 @@ func (db *DB) Exist(namespace []byte, key []byte) bool {
 
 	if err != nil {
 		if err == badger.ErrKeyNotFound {
-			return false
+			return false, nil
 		}
+		return false, err
 	}
 
-	return isExist
+	return isExist, nil
 }
 
 func (db *DB) Close() error {
@@ -220,7 +214,7 @@ func (db *DB) Close() error {
 	return db.db.Close()
 }
 
-func (db *DB) NewTx() *Transaction {
+func (db *DB) NewTx() rollupdb.Transaction {
 	badgerTx := db.db.NewTransaction(true)
 
 	retTransaction := &Transaction{
@@ -232,7 +226,7 @@ func (db *DB) NewTx() *Transaction {
 	return retTransaction
 }
 
-func (db *DB) NewBulk() *Bulk {
+func (db *DB) NewBulk() rollupdb.Bulk {
 	badgerWriteBatch := db.db.NewWriteBatch()
 
 	retBulk := &Bulk{

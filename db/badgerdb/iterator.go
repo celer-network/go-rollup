@@ -1,9 +1,10 @@
-package db
+package badgerdb
 
 import (
 	"bytes"
 	"errors"
 
+	"github.com/celer-network/go-rollup/db"
 	"github.com/dgraph-io/badger/v2"
 )
 
@@ -14,7 +15,7 @@ type Iterator struct {
 	iter    *badger.Iterator
 }
 
-func (db *DB) Iterator(start, end []byte) *Iterator {
+func (db *DB) Iterator(start, end []byte) db.Iterator {
 	badgerTx := db.db.NewTransaction(true)
 
 	var reverse bool
@@ -73,8 +74,8 @@ func (iter *Iterator) Valid() bool {
 	return true
 }
 
-func (iter *Iterator) Key() (key []byte) {
-	return iter.iter.Item().Key()
+func (iter *Iterator) Key() (key []byte, err error) {
+	return iter.iter.Item().Key(), nil
 }
 
 func (iter *Iterator) Value() (value []byte, err error) {

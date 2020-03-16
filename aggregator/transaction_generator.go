@@ -17,7 +17,7 @@ const (
 )
 
 type TransactionGenerator struct {
-	db                  *db.DB
+	db                  db.DB
 	sidechainClient     *ethclient.Client
 	rollupChain         *rollup.RollupChain
 	rollupTokenRegistry *rollup.RollupTokenRegistry
@@ -26,7 +26,7 @@ type TransactionGenerator struct {
 }
 
 func NewTransactionGenerator(
-	db *db.DB,
+	db db.DB,
 	mainchainClient *ethclient.Client,
 	rollupChain *rollup.RollupChain,
 ) *TransactionGenerator {
@@ -61,6 +61,19 @@ func NewTransactionGenerator(
 func (tg *TransactionGenerator) Start() {
 	go tg.watchRollupTokenRegistry()
 	go tg.watchTokenMapper()
+	go tg.watchTransition()
+}
+
+func (tg *TransactionGenerator) watchTransition() {
+	log.Print("Watch Transition")
+	channel := make(chan *rollup.RollupChainTransition)
+	tg.rollupChain.WatchTransition(&bind.WatchOpts{}, channel)
+	for {
+		select {
+		case event := <-channel:
+			log.Printf("Transition %s", common.Bytes2Hex(event.Data))
+		}
+	}
 }
 
 func (tg *TransactionGenerator) watchRollupTokenRegistry() error {
@@ -79,6 +92,14 @@ func (tg *TransactionGenerator) watchRollupTokenRegistry() error {
 				db.NamespaceTokenAddressToTokenIndex,
 				event.TokenAddress.Bytes(),
 				event.TokenIndex.Bytes(),
+			)
+			if err != nil {
+				log.Err(err).Send()
+			}
+			err = tg.db.Set(
+				db.NamespaceTokenIndexToTokenAddress,
+				event.TokenIndex.Bytes(),
+				event.TokenAddress.Bytes(),
 			)
 			if err != nil {
 				log.Err(err).Send()
