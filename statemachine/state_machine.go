@@ -2,6 +2,7 @@ package statemachine
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/rs/zerolog/log"
@@ -223,8 +224,10 @@ func (sm *StateMachine) applyTransfer(tx *types.TransferTransaction) ([]*types.A
 	}
 
 	nonce := senderNonces[tokenIndex]
-	if nonce.Add(nonce, big.NewInt(1)).Cmp(tx.Nonce) != 0 {
-		return nil, errors.New("Invalid nonce")
+	requiredNonce := nonce.Add(nonce, big.NewInt(1))
+	if requiredNonce.Cmp(tx.Nonce) != 0 {
+		err := fmt.Errorf("Invalid nonce, required %d got %d", requiredNonce.Uint64(), tx.Nonce.Uint64())
+		return nil, err
 	}
 	senderBalance := senderBalances[tokenIndex]
 	if senderBalance.Cmp(amount) == -1 {

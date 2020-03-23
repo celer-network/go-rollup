@@ -8,7 +8,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
+
+	"github.com/spf13/viper"
 
 	"github.com/celer-network/sidechain-contracts/bindings/go/sidechain"
 
@@ -44,12 +47,10 @@ type TestTokenInfo struct {
 
 const (
 	testRootDir                  = "/tmp/celer_rollup_test"
+	envDir                       = "env"
 	mainchainEthEndpoint         = "ws://127.0.0.1:8546"
 	sidechainEthEndpoint         = "ws://127.0.0.1:8548"
 	aggregatorAddressStr         = "0x6a6d2a97da1c453a4e099e8054865a0a59728863"
-	mainchainEtherbaseKeystore   = "env/keystore/mainchain_etherbase.json"
-	sidechainEtherbaseKeystore   = "env/keystore/sidechain_etherbase.json"
-	aggregatorKeystore           = "env/aggregator.json"
 	mainchainEtherbaseAddressStr = "0xb5bb8b7f6f1883e0c01ffb8697024532e6f3238c"
 	sidechainEtherbaseAddressStr = "0xba756d65a1a03f07d205749f35e2406e4a8522ad"
 	repo                         = "github.com/celer-network/go-rollup"
@@ -60,7 +61,20 @@ var (
 	sidechainEtherBaseAddress = common.HexToAddress(sidechainEtherbaseAddressStr)
 	aggregatorAddress         = common.HexToAddress(aggregatorAddressStr)
 
-	configDir = filepath.Join(testRootDir, "config")
+	testConfigDir              = filepath.Join(testRootDir, "config")
+	mainchainDataDir           = filepath.Join(testRootDir, "mainchaindata")
+	sidechainDataDir           = filepath.Join(testRootDir, "sidechaindata")
+	aggregatorDbDir            = filepath.Join(testRootDir, "db")
+	emptyPasswordFile          = filepath.Join(envDir, "empty_password.txt")
+	mainchainGenesis           = filepath.Join(envDir, "mainchain_genesis.json")
+	sidechainGenesis           = filepath.Join(envDir, "sidechain_genesis.json")
+	keystoreDir                = filepath.Join(envDir, "keystore")
+	envConfigDir               = filepath.Join(envDir, "config")
+	mainchainEtherbaseKeystore = filepath.Join(keystoreDir, "mainchain_etherbase.json")
+	sidechainEtherbaseKeystore = filepath.Join(keystoreDir, "sidechain_etherbase.json")
+	aggregatorKeystore         = filepath.Join(keystoreDir, "aggregator.json")
+	account1Keystore           = filepath.Join(keystoreDir, "account1.json")
+	account2Keystore           = filepath.Join(keystoreDir, "account2.json")
 )
 
 // toBuild map package subpath to binary file name eg. aggregator/cmd -> aggregator means
@@ -83,10 +97,10 @@ func sleep(second time.Duration) {
 }
 
 func writeBytes(bytes []byte, path string) {
-	_, err := os.Stat(configDir)
+	_, err := os.Stat(testConfigDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			os.Mkdir(configDir, 0777)
+			os.Mkdir(testConfigDir, 0777)
 		} else {
 			log.Fatal().Err(err).Send()
 		}
@@ -102,7 +116,7 @@ func saveMainchainContractAddresses(addresses *MainchainContractAddresses) {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	writeBytes(bytes, filepath.Join(configDir, "mainchain_contract_addresses.yaml"))
+	writeBytes(bytes, filepath.Join(testConfigDir, "mainchain_contract_addresses.yaml"))
 }
 
 func saveSidechainContractAddresses(addresses *SidechainContractAddresses) {
@@ -110,7 +124,7 @@ func saveSidechainContractAddresses(addresses *SidechainContractAddresses) {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	writeBytes(bytes, filepath.Join(configDir, "sidechain_contract_addresses.yaml"))
+	writeBytes(bytes, filepath.Join(testConfigDir, "sidechain_contract_addresses.yaml"))
 }
 
 func saveTestTokenInfo(info *TestTokenInfo) {
@@ -118,55 +132,128 @@ func saveTestTokenInfo(info *TestTokenInfo) {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	writeBytes(bytes, filepath.Join(configDir, "test_token.yaml"))
+	writeBytes(bytes, filepath.Join(testConfigDir, "test_token.yaml"))
 }
 
-// func StartChain() (*os.Process, error) {
-// 	log.Print("outRootDir", outRootDir, "envDir", envDir)
-// 	chainDataDir := outRootDir + "chaindata"
-// 	logFname := outRootDir + "chain.log"
-// 	if err := os.MkdirAll(chainDataDir, os.ModePerm); err != nil {
-// 		return nil, err
-// 	}
+func SetupConfig() error {
+	cmdCopy := exec.Command("cp", "-a", envConfigDir, testRootDir)
+	err := cmdCopy.Run()
+	if err != nil {
+		return err
+	}
+	viper.AddConfigPath(testConfigDir)
+	viper.SetConfigName("parameters")
+	err = viper.MergeInConfig()
+	if err != nil {
+		return err
+	}
+	viper.SetConfigName("ethereum_networks")
+	err = viper.MergeInConfig()
+	if err != nil {
+		return err
+	}
+	viper.SetConfigName("mainchain_contract_addresses")
+	err = viper.MergeInConfig()
+	if err != nil {
+		return err
+	}
+	viper.SetConfigName("sidechain_contract_addresses")
+	err = viper.MergeInConfig()
+	if err != nil {
+		return err
+	}
+	viper.SetConfigName("test_token")
+	return viper.MergeInConfig()
+}
 
-// 	cmdCopy := exec.Command("cp", "-a", "keystore", chainDataDir)
-// 	cmdCopy.Dir, _ = filepath.Abs(envDir)
-// 	log.Infoln("copy", filepath.Join(envDir, "keystore"), filepath.Join(chainDataDir, "keystore"))
-// 	if err := cmdCopy.Run(); err != nil {
-// 		return nil, err
-// 	}
+func StartMainchain() (*os.Process, error) {
+	return StartChain(
+		883,
+		mainchainDataDir,
+		"mainchain.log",
+		mainchainGenesis,
+		mainchainEtherbaseAddressStr,
+		30303,
+		8545,
+		8546,
+	)
+}
 
-// 	// geth init
-// 	cmdInit := exec.Command("geth", "--datadir", chainDataDir, "init", envDir+"/celer_genesis.json")
-// 	// set cmd.Dir because relative files are under testing/env
-// 	cmdInit.Dir, _ = filepath.Abs(envDir)
-// 	if err := cmdInit.Run(); err != nil {
-// 		return nil, err
-// 	}
-// 	// actually run geth, blocking. set syncmode full to avoid bloom mem cache by fast sync
-// 	cmd := exec.Command("geth", "--networkid", "883", "--cache", "256", "--nousb", "--syncmode", "full", "--nodiscover", "--maxpeers", "0",
-// 		"--netrestrict", "127.0.0.1/8", "--datadir", chainDataDir, "--keystore", filepath.Join(chainDataDir, "keystore"), "--targetgaslimit", "8000000",
-// 		"--mine", "--allow-insecure-unlock", "--unlock", "0", "--password", "empty_password.txt", "--rpc", "--rpccorsdomain", "*",
-// 		"--rpcapi", "admin,debug,eth,miner,net,personal,shh,txpool,web3")
-// 	cmd.Dir = cmdInit.Dir
+func StartSidechain() (*os.Process, error) {
+	return StartChain(
+		884,
+		sidechainDataDir,
+		"sidechain.log",
+		sidechainGenesis,
+		sidechainEtherbaseAddressStr,
+		30304,
+		8547,
+		8548,
+	)
+}
 
-// 	logF, _ := os.Create(logFname)
-// 	cmd.Stderr = logF
-// 	cmd.Stdout = logF
-// 	if err := cmd.Start(); err != nil {
-// 		return nil, err
-// 	}
-// 	fmt.Println("geth pid:", cmd.Process.Pid)
-// 	// in case geth exits with non-zero, exit test early
-// 	// if geth is killed by ethProc.Signal, it exits w/ 0
-// 	go func() {
-// 		if err := cmd.Wait(); err != nil {
-// 			fmt.Println("geth process failed:", err)
-// 			os.Exit(1)
-// 		}
-// 	}()
-// 	return cmd.Process, nil
-// }
+func StartChain(
+	networkId int,
+	chainDataDir string,
+	logFilename string,
+	genesis string,
+	etherbase string,
+	port int,
+	rpcPort int,
+	wsPort int,
+) (*os.Process, error) {
+	if err := os.MkdirAll(chainDataDir, os.ModePerm); err != nil {
+		log.Print(err)
+		return nil, err
+	}
+
+	cmdCopy := exec.Command("cp", "-a", keystoreDir, chainDataDir)
+	if err := cmdCopy.Run(); err != nil {
+		log.Print(cmdCopy, err)
+		return nil, err
+	}
+
+	// geth init
+	cmdInit := exec.Command(
+		"geth", "--datadir", chainDataDir, "init", genesis)
+	if err := cmdInit.Run(); err != nil {
+		log.Print(cmdInit, err)
+		return nil, err
+	}
+	// actually run geth, blocking. set syncmode full to avoid bloom mem cache by fast sync
+	cmd := exec.Command(
+		"geth", "--networkid", strconv.Itoa(networkId), "--cache", "256", "--nousb", "--syncmode", "full", "--nodiscover", "--maxpeers", "0",
+		"--netrestrict", "127.0.0.1/8", "--datadir", chainDataDir, "--keystore", filepath.Join(chainDataDir, "keystore"), "--targetgaslimit", "10000000",
+		"--mine", "--allow-insecure-unlock", "--unlock", etherbase, "--etherbase", etherbase, "--password", emptyPasswordFile,
+		"--port", strconv.Itoa(port),
+		"--rpc", "--rpcport", strconv.Itoa(rpcPort), "--rpccorsdomain", "*",
+		"--rpcapi", "admin,debug,eth,miner,net,personal,txpool,web3",
+		"--ws", "--wsport", strconv.Itoa(wsPort), "--wsorigins", "*",
+		"--wsapi", "admin,debug,eth,miner,net,personal,txpool,web3",
+	)
+	cmd.Dir = cmdInit.Dir
+
+	logF, err := os.Create(filepath.Join(testRootDir, logFilename))
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stderr = logF
+	cmd.Stdout = logF
+	if err := cmd.Start(); err != nil {
+		log.Print(cmd, err)
+		return nil, err
+	}
+	log.Printf("geth pid: %d\n", cmd.Process.Pid)
+	// in case geth exits with non-zero, exit test early
+	// if geth is killed by ethProc.Signal, it exits w/ 0
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			log.Print("geth process failed: ", err)
+			os.Exit(1)
+		}
+	}()
+	return cmd.Process, nil
+}
 
 func DeployMainchainContracts() *MainchainContractAddresses {
 	conn, err := ethclient.Dial(filepath.Join(testRootDir, "mainchaindata/geth.ipc"))
