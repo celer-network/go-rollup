@@ -47,8 +47,8 @@ func RunTokenMapper(
 	testTokenAddress := common.HexToAddress(testTokenAddressStr)
 
 	ctx := context.Background()
-	mapToken(ctx, sidechainConn, sidechainAuth, testTokenAddress, testTokenName, testTokenSymbol, testTokenDecimals)
-	registerToken(ctx, mainchainConn, mainchainAuth, testTokenAddress)
+	MapToken(ctx, sidechainConn, sidechainAuth, testTokenAddress, testTokenName, testTokenSymbol, testTokenDecimals)
+	RegisterToken(ctx, mainchainConn, mainchainAuth, testTokenAddress)
 
 	account1Auth, err := utils.GetAuthFromKeystore(account1Keystore, "")
 	if err != nil {
@@ -58,10 +58,10 @@ func RunTokenMapper(
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	depositAndTransfer(ctx, sidechainConn, sidechainAuth, account1Auth, account2Auth, testTokenAddress)
+	DepositAndTransfer(ctx, sidechainConn, sidechainAuth, account1Auth, account2Auth, testTokenAddress)
 }
 
-func registerToken(ctx context.Context, conn *ethclient.Client, auth *bind.TransactOpts, tokenAddress common.Address) {
+func RegisterToken(ctx context.Context, conn *ethclient.Client, auth *bind.TransactOpts, tokenAddress common.Address) {
 	rollupTokenRegistryAddress := common.HexToAddress(viper.GetString("rollupTokenRegistry"))
 	rollupTokenRegistry, err := rollup.NewRollupTokenRegistry(rollupTokenRegistryAddress, conn)
 	if err != nil {
@@ -74,7 +74,7 @@ func registerToken(ctx context.Context, conn *ethclient.Client, auth *bind.Trans
 	waitMined(ctx, conn, tx)
 }
 
-func mapToken(
+func MapToken(
 	ctx context.Context,
 	conn *ethclient.Client,
 	auth *bind.TransactOpts,
@@ -96,7 +96,7 @@ func mapToken(
 	waitMined(ctx, conn, tx)
 }
 
-func depositAndTransfer(
+func DepositAndTransfer(
 	ctx context.Context,
 	conn *ethclient.Client,
 	mapperAuth *bind.TransactOpts,
@@ -127,7 +127,7 @@ func depositAndTransfer(
 	}
 	waitMined(ctx, conn, tx)
 
-	tx, err = sidechainErc20.Transfer0(auth1, auth2.From, big.NewInt(1), nil)
+	tx, err = sidechainErc20.Transfer(auth1, auth1.From, auth2.From, big.NewInt(1), nil)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}

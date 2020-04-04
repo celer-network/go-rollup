@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/ecdsa"
+	"fmt"
 	"io/ioutil"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -25,7 +27,7 @@ func RecoverSigner(data []byte, sig []byte) common.Address {
 	return recoveredAddr
 }
 
-func GetAuthFromKeystore(path string, password string) (*bind.TransactOpts, error) {
+func GetPrivateKayFromKeystore(path string, password string) (*ecdsa.PrivateKey, error) {
 	ksBytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -34,7 +36,24 @@ func GetAuthFromKeystore(path string, password string) (*bind.TransactOpts, erro
 	if err != nil {
 		return nil, err
 	}
-	return bind.NewKeyedTransactor(key.PrivateKey), nil
+	return key.PrivateKey, nil
+}
+
+func GetAuthFromKeystore(path string, password string) (*bind.TransactOpts, error) {
+	privateKey, err := GetPrivateKayFromKeystore(path, password)
+	if err != nil {
+		return nil, err
+	}
+	return bind.NewKeyedTransactor(privateKey), nil
+}
+
+func SignData(privateKey *ecdsa.PrivateKey, data ...[]byte) ([]byte, error) {
+	hash := crypto.Keccak256Hash(data...)
+	prefixedHash := crypto.Keccak256Hash(
+		[]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%v", len(hash))),
+		hash.Bytes(),
+	)
+	return crypto.Sign(prefixedHash.Bytes(), privateKey)
 }
 
 func generatePrefixedHash(data []byte) []byte {
