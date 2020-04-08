@@ -111,10 +111,11 @@ func TestDummyApp(t *testing.T) {
 	playerOnePrivateKey, err := utils.GetPrivateKayFromKeystore(account1Keystore, "")
 	playerOneSig, err := utils.SignData(
 		playerOnePrivateKey,
-		account1Auth.From.Bytes(),
-		dummyAppAddress.Bytes(),
-		big.NewInt(1).Bytes(),
-		big.NewInt(0).Bytes(),
+		[]string{"address", "address", "uint256", "uint256"},
+		account1Auth.From,
+		dummyAppAddress,
+		big.NewInt(1),
+		big.NewInt(0),
 	)
 	dummyApp.PlayerOneDeposit(account1Auth, playerOneSig)
 	dummyApp.PlayerTwoWithdraw(account2Auth)

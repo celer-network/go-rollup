@@ -25,6 +25,7 @@ require (
 	github.com/maticnetwork/bor v0.1.4
 	github.com/mattn/go-colorable v0.1.4
 	github.com/mattn/go-isatty v0.0.10 // indirect
+	github.com/miguelmota/go-solidity-sha3 v0.1.0
 	github.com/minio/sha256-simd v0.1.1
 	github.com/onsi/ginkgo v1.10.3 // indirect
 	github.com/onsi/gomega v1.7.1 // indirect

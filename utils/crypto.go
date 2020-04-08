@@ -2,13 +2,13 @@ package utils
 
 import (
 	"crypto/ecdsa"
-	"fmt"
 	"io/ioutil"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	solsha3 "github.com/miguelmota/go-solidity-sha3"
 	"github.com/rs/zerolog/log"
 )
 
@@ -47,13 +47,11 @@ func GetAuthFromKeystore(path string, password string) (*bind.TransactOpts, erro
 	return bind.NewKeyedTransactor(privateKey), nil
 }
 
-func SignData(privateKey *ecdsa.PrivateKey, data ...[]byte) ([]byte, error) {
-	hash := crypto.Keccak256Hash(data...)
-	prefixedHash := crypto.Keccak256Hash(
-		[]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%v", len(hash))),
-		hash.Bytes(),
-	)
-	return crypto.Sign(prefixedHash.Bytes(), privateKey)
+func SignData(privateKey *ecdsa.PrivateKey, types []string, data ...interface{}) ([]byte, error) {
+	hash := solsha3.SoliditySHA3(types, data)
+	prefixedHash := solsha3.SoliditySHA3WithPrefix(hash)
+	log.Debug().Str("prefixedHash", common.Bytes2Hex(prefixedHash)).Send()
+	return crypto.Sign(prefixedHash, privateKey)
 }
 
 func generatePrefixedHash(data []byte) []byte {
