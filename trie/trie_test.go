@@ -14,8 +14,6 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
-
-	"github.com/celer-network/go-rollup/db"
 )
 
 func TestTrieEmpty(t *testing.T) {
@@ -365,7 +363,7 @@ func TestTrieRevert(t *testing.T) {
 	root2, _ := smt.Update([][]byte{key1}, [][]byte{values[1]})
 	smt.Commit()
 	smt.Revert(root)
-	nodes, exists, err := smt.db.Store.Get(db.NamespaceTrie, root)
+	nodes, exists, err := smt.db.Store.Get(smt.dbNamespace, root)
 	if err != nil {
 		t.Fatal("error testing reverted root", err)
 	}
@@ -373,7 +371,7 @@ func TestTrieRevert(t *testing.T) {
 	if len(nodes) == 0 {
 		t.Fatal("shortcut node shouldn't be deleted by revert")
 	}
-	nodes, exists, err = smt.db.Store.Get(db.NamespaceTrie, root2)
+	nodes, exists, err = smt.db.Store.Get(smt.dbNamespace, root2)
 	if err != nil {
 		t.Fatal("error testing reverted root", err)
 	}
@@ -387,7 +385,7 @@ func TestTrieRevert(t *testing.T) {
 	smt.Update([][]byte{key1}, [][]byte{values[1]})
 	smt.Commit()
 	smt.Revert(root)
-	node, exists, err := smt.db.Store.Get(db.NamespaceTrie, root)
+	node, exists, err := smt.db.Store.Get(smt.dbNamespace, root)
 	if err != nil {
 		t.Fatal("error getting node")
 	}
@@ -436,7 +434,7 @@ func TestTrieRevert(t *testing.T) {
 	}
 	// Check all reverted nodes have been deleted
 	for node, _ := range updatedNodes2 {
-		nodes, exists, err := smt.db.Store.Get(db.NamespaceTrie, node[:])
+		nodes, exists, err := smt.db.Store.Get(smt.dbNamespace, node[:])
 		if err != nil {
 			t.Fatal("error getting nodes")
 		}
@@ -448,7 +446,7 @@ func TestTrieRevert(t *testing.T) {
 		}
 	}
 	for node, _ := range updatedNodes1 {
-		nodes, exists, err := smt.db.Store.Get(db.NamespaceTrie, node[:])
+		nodes, exists, err := smt.db.Store.Get(smt.dbNamespace, node[:])
 		if err != nil {
 			t.Fatal("error getting nodes")
 		}

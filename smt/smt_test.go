@@ -11,9 +11,11 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+var namespaceTestTrie = []byte("tt")
+
 func TestSMTNumericalKey(t *testing.T) {
 	db := memorydb.NewDB()
-	smt, err := NewSparseMerkleTree(db, sha3.NewLegacyKeccak256(), nil, 4, false)
+	smt, err := NewSparseMerkleTree(db, namespaceTestTrie, sha3.NewLegacyKeccak256(), nil, 4, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -49,7 +51,7 @@ func TestSMTNumericalKey(t *testing.T) {
 
 func TestSparseMerkleTree(t *testing.T) {
 	db := memorydb.NewDB()
-	smt, err := NewSparseMerkleTree(db, sha256.New(), nil, 256, true)
+	smt, err := NewSparseMerkleTree(db, namespaceTestTrie, sha256.New(), nil, 256, true)
 	if err != nil {
 		t.Error(err)
 	}
@@ -143,7 +145,7 @@ func TestSparseMerkleTree(t *testing.T) {
 		t.Error("did not get correct value when getting non-empty key")
 	}
 
-	smt2, err := NewSparseMerkleTree(db, sha256.New(), smt.Root(), smt.Height(), smt.IsHashKey())
+	smt2, err := NewSparseMerkleTree(db, namespaceTestTrie, sha256.New(), smt.Root(), smt.Height(), smt.IsHashKey())
 	if err != nil {
 		t.Error("error importing smt")
 	}

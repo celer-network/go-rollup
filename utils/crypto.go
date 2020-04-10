@@ -47,7 +47,7 @@ func GetAuthFromKeystore(path string, password string) (*bind.TransactOpts, erro
 	return bind.NewKeyedTransactor(privateKey), nil
 }
 
-func SignData(privateKey *ecdsa.PrivateKey, types []string, data ...interface{}) ([]byte, error) {
+func SignData(privateKey *ecdsa.PrivateKey, types []string, data []interface{}) ([]byte, error) {
 	hash := solsha3.SoliditySHA3(types, data)
 	prefixedHash := solsha3.SoliditySHA3WithPrefix(hash)
 	log.Debug().Str("prefixedHash", common.Bytes2Hex(prefixedHash)).Send()

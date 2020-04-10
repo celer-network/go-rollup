@@ -14,7 +14,8 @@ import (
 // the values are stored at the highest subtree root that contains only that value.
 // If the tree is sparse, this requires fewer hashing operations.
 type Trie struct {
-	db *CacheDB
+	db          *CacheDB
+	dbNamespace []byte
 	// Root is the current root of the smt.
 	Root []byte
 	// prevRoot is the root before the last update
@@ -478,7 +479,7 @@ func (s *Trie) loadBatch(root []byte) ([][]byte, error) {
 		s.loadDbMux.Unlock()
 	}
 	s.db.lock.Lock()
-	dbval, exists, err := s.db.Store.Get(db.NamespaceTrie, root[:HashLength])
+	dbval, exists, err := s.db.Store.Get(s.dbNamespace, root[:HashLength])
 	s.db.lock.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("node not found: %w", err)

@@ -27,10 +27,10 @@ type StateMachine struct {
 	serializer *types.Serializer
 }
 
-func NewStateMachine(db db.DB, serializer *types.Serializer) (*StateMachine, error) {
+func NewStateMachine(db db.DB, trieDbNamespace []byte, serializer *types.Serializer) (*StateMachine, error) {
 	// TODO: restore from db
 
-	smt, err := smt.NewSparseMerkleTree(db, sha3.NewLegacyKeccak256(), nil, stateTreeHeight, false)
+	smt, err := smt.NewSparseMerkleTree(db, trieDbNamespace, sha3.NewLegacyKeccak256(), nil, stateTreeHeight, false)
 	if err != nil {
 		return nil, err
 	}

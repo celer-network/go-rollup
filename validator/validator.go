@@ -45,6 +45,10 @@ func NewValidator(
 	}
 }
 
+func (v *Validator) Start() {
+	go v.watchNewRollupBlock()
+}
+
 func (v *Validator) watchNewRollupBlock() error {
 	channel := make(chan *rollup.RollupChainNewRollupBlock)
 	sub, err := v.rollupChain.WatchNewRollupBlock(&bind.WatchOpts{}, channel)

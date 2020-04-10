@@ -5,6 +5,8 @@ import (
 	"errors"
 	"math/big"
 
+	rollupdb "github.com/celer-network/go-rollup/db"
+
 	"github.com/celer-network/go-rollup/db/memorydb"
 	"github.com/celer-network/go-rollup/smt"
 	"github.com/minio/sha256-simd"
@@ -59,7 +61,7 @@ func (bs *BlockSubmitter) submitBlock(pendingBlock *types.RollupBlock) error {
 	}
 	block, _ := bs.rollupChain.Blocks(&bind.CallOpts{}, big.NewInt(0))
 	log.Printf("Contract block root hash: %s", common.Bytes2Hex(block.RootHash[:]))
-	tree, _ := smt.NewSparseMerkleTree(memorydb.NewDB(), sha3.NewLegacyKeccak256(), nil, int(block.BlockSize.Uint64()), false)
+	tree, _ := smt.NewSparseMerkleTree(memorydb.NewDB(), rollupdb.NamespaceRollupBlockTrie, sha3.NewLegacyKeccak256(), nil, int(block.BlockSize.Uint64()), false)
 	transitions := pendingBlock.Transitions
 	encodedTransitions := make([][]byte, len(transitions))
 	for i, transition := range transitions {

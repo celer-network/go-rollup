@@ -122,10 +122,12 @@ func main() {
 	playerOneSig, err := utils.SignData(
 		playerOnePrivateKey,
 		[]string{"address", "address", "uint256", "uint256"},
-		account1Auth.From,
-		dummyAppAddress,
-		big.NewInt(1),
-		big.NewInt(1),
+		[]interface{}{
+			account1Auth.From,
+			dummyAppAddress,
+			big.NewInt(1),
+			big.NewInt(1),
+		},
 	)
 	log.Debug().Str("playerOneSig", common.Bytes2Hex(playerOneSig)).Send()
 	account1Auth.GasLimit = 10000000

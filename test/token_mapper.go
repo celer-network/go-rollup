@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"math/big"
 
 	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
@@ -58,7 +59,11 @@ func RunTokenMapper(
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	DepositAndTransfer(ctx, sidechainConn, sidechainAuth, account1Auth, account2Auth, testTokenAddress)
+	account1PrivateKey, err := utils.GetPrivateKayFromKeystore(account1Keystore, "")
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	DepositAndTransfer(ctx, sidechainConn, sidechainAuth, account1Auth, account2Auth, testTokenAddress, account1PrivateKey)
 }
 
 func RegisterToken(ctx context.Context, conn *ethclient.Client, auth *bind.TransactOpts, tokenAddress common.Address) {
@@ -102,7 +107,9 @@ func DepositAndTransfer(
 	mapperAuth *bind.TransactOpts,
 	auth1 *bind.TransactOpts,
 	auth2 *bind.TransactOpts,
-	token common.Address) {
+	token common.Address,
+	auth1PrivateKey *ecdsa.PrivateKey,
+) {
 	tokenMapperAddress := common.HexToAddress(viper.GetString("tokenMapper"))
 	tokenMapper, err := sidechain.NewTokenMapper(tokenMapperAddress, conn)
 	if err != nil {
@@ -127,7 +134,22 @@ func DepositAndTransfer(
 	}
 	waitMined(ctx, conn, tx)
 
-	tx, err = sidechainErc20.Transfer(auth1, auth1.From, auth2.From, big.NewInt(1), nil)
+	amount := big.NewInt(1)
+	nonce, err := sidechainErc20.Nonces(&bind.CallOpts{}, auth1.From)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	signature, err := utils.SignData(
+		auth1PrivateKey,
+		[]string{"address", "address", "uint256", "uint256"},
+		[]interface{}{
+			auth1.From,
+			auth2.From,
+			amount,
+			nonce,
+		},
+	)
+	tx, err = sidechainErc20.Transfer(auth1, auth1.From, auth2.From, amount, signature)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}

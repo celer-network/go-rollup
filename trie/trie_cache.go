@@ -22,7 +22,8 @@ type CacheDB struct {
 	// lock for CacheDB
 	lock sync.RWMutex
 	// store is the interface to disk db
-	Store db.DB
+	Store       db.DB
+	dbNamespace []byte
 }
 
 // commit adds updatedNodes to the given database transaction.
@@ -31,7 +32,7 @@ func (c *CacheDB) commit(txn db.Transaction) error {
 	defer c.updatedMux.Unlock()
 	for key, batch := range c.updatedNodes {
 		var node []byte
-		err := txn.Set(db.NamespaceTrie, append(node, key[:]...), c.serializeBatch(batch))
+		err := txn.Set(c.dbNamespace, append(node, key[:]...), c.serializeBatch(batch))
 		if err != nil {
 			return err
 		}

@@ -11,7 +11,7 @@ import (
 
 func TestProofs(t *testing.T) {
 	db := memorydb.NewDB()
-	smt, err := NewSparseMerkleTree(db, sha256.New(), nil, 256, true)
+	smt, err := NewSparseMerkleTree(db, namespaceTestTrie, sha256.New(), nil, 256, true)
 	if err != nil {
 		t.Error(err)
 	}

@@ -31,7 +31,7 @@ func (s *Trie) loadCache(root []byte, batch [][]byte, iBatch, height int, ch cha
 	if height%4 == 0 {
 		// Load the node from db
 		s.db.lock.Lock()
-		dbval, exists, err := s.db.Store.Get(db.NamespaceTrie, root[:HashLength])
+		dbval, exists, err := s.db.Store.Get(s.dbNamespace, root[:HashLength])
 		if err != nil {
 			ch <- fmt.Errorf("get error: %w", err)
 			return
@@ -117,7 +117,7 @@ func (s *Trie) get(root, key []byte, batch [][]byte, iBatch, height int) ([]byte
 // TrieRootExistsireturns true if the root exists in Database.
 func (s *Trie) TrieRootExists(root []byte) bool {
 	s.db.lock.RLock()
-	dbval, exists, err := s.db.Store.Get(db.NamespaceTrie, root)
+	dbval, exists, err := s.db.Store.Get(s.dbNamespace, root)
 	if err != nil || !exists {
 		return false
 	}

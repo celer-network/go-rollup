@@ -3,6 +3,8 @@ package validator
 import (
 	"math/big"
 
+	rollupdb "github.com/celer-network/go-rollup/db"
+
 	"github.com/celer-network/go-rollup/db/memorydb"
 	"github.com/celer-network/go-rollup/smt"
 	"github.com/celer-network/go-rollup/types"
@@ -19,7 +21,7 @@ type RollupBlockInfo struct {
 func NewRollupBlockInfo(serializer *types.Serializer, rollupBlock *types.RollupBlock) (*RollupBlockInfo, error) {
 	transitions := rollupBlock.Transitions
 	numTransitions := len(transitions)
-	smt, err := smt.NewSparseMerkleTree(memorydb.NewDB(), sha3.NewLegacyKeccak256(), nil, numTransitions, false)
+	smt, err := smt.NewSparseMerkleTree(memorydb.NewDB(), rollupdb.NamespaceRollupBlockTrie, sha3.NewLegacyKeccak256(), nil, numTransitions, false)
 	if err != nil {
 		return nil, err
 	}

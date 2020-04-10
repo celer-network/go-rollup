@@ -18,40 +18,42 @@ var (
 
 // SparseMerkleTree is a Sparse Merkle tree.
 type SparseMerkleTree struct {
-	hasher  hash.Hash
-	db      rollupdb.DB
-	root    []byte
-	height  int
-	hashKey bool
+	hasher      hash.Hash
+	db          rollupdb.DB
+	dbNamespace []byte
+	root        []byte
+	height      int
+	hashKey     bool
 }
 
 // NewSparseMerkleTree creates or restores a Sparse Merkle tree with a DB.
-func NewSparseMerkleTree(db rollupdb.DB, hasher hash.Hash, root []byte, height int, hashKey bool) (*SparseMerkleTree, error) {
+func NewSparseMerkleTree(db rollupdb.DB, dbNamespace []byte, hasher hash.Hash, root []byte, height int, hashKey bool) (*SparseMerkleTree, error) {
 	smt := SparseMerkleTree{
-		hasher:  hasher,
-		db:      db,
-		height:  height,
-		hashKey: hashKey,
+		hasher:      hasher,
+		db:          db,
+		dbNamespace: dbNamespace,
+		height:      height,
+		hashKey:     hashKey,
 	}
 
 	hasherSizeBits := hasher.Size() * 8
-	_, exists, err := db.Get(rollupdb.NamespaceSMT, initMarker)
+	_, exists, err := db.Get(dbNamespace, initMarker)
 	if err != nil {
 		return nil, err
 	}
 	if !exists {
 		bulk := db.NewBulk()
 		for i := hasherSizeBits - height; i < hasherSizeBits-1; i++ {
-			err := bulk.Set(rollupdb.NamespaceSMT, smt.defaultNode(i), append(smt.defaultNode(i+1), smt.defaultNode(i+1)...))
+			err := bulk.Set(dbNamespace, smt.defaultNode(i), append(smt.defaultNode(i+1), smt.defaultNode(i+1)...))
 			if err != nil {
 				return nil, err
 			}
 		}
-		err := bulk.Set(rollupdb.NamespaceSMT, smt.defaultNode(hasherSizeBits-1), defaultValue)
+		err := bulk.Set(dbNamespace, smt.defaultNode(hasherSizeBits-1), defaultValue)
 		if err != nil {
 			return nil, err
 		}
-		err = bulk.Set(rollupdb.NamespaceSMT, initMarker, []byte{})
+		err = bulk.Set(dbNamespace, initMarker, []byte{})
 		err = bulk.Flush()
 		if err != nil {
 			return nil, err
@@ -115,7 +117,7 @@ func (smt *SparseMerkleTree) GetForRoot(key []byte, root []byte) ([]byte, error)
 	}
 	currentHash := root
 	for i := 0; i < smt.height-1; i++ {
-		currentValue, exists, err := smt.db.Get(rollupdb.NamespaceSMT, currentHash)
+		currentValue, exists, err := smt.db.Get(smt.dbNamespace, currentHash)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +131,7 @@ func (smt *SparseMerkleTree) GetForRoot(key []byte, root []byte) ([]byte, error)
 		}
 	}
 
-	value, exists, err := smt.db.Get(rollupdb.NamespaceSMT, currentHash)
+	value, exists, err := smt.db.Get(smt.dbNamespace, currentHash)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +169,7 @@ func (smt *SparseMerkleTree) UpdateForRoot(key []byte, value []byte, root []byte
 func (smt *SparseMerkleTree) updateWithSideNodes(path []byte, value []byte, sideNodes [][]byte) ([]byte, error) {
 	bulk := smt.db.NewBulk()
 	currentHash := smt.digest(value)
-	err := bulk.Set(rollupdb.NamespaceSMT, currentHash, value)
+	err := bulk.Set(smt.dbNamespace, currentHash, value)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +184,7 @@ func (smt *SparseMerkleTree) updateWithSideNodes(path []byte, value []byte, side
 			currentValue = append(currentValue, sideNode...)
 		}
 		currentHash = smt.digest(currentValue)
-		err := bulk.Set(rollupdb.NamespaceSMT, currentHash, currentValue)
+		err := bulk.Set(smt.dbNamespace, currentHash, currentValue)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +199,7 @@ func (smt *SparseMerkleTree) updateWithSideNodes(path []byte, value []byte, side
 }
 
 func (smt *SparseMerkleTree) sideNodesForRoot(path []byte, root []byte) ([][]byte, error) {
-	currentValue, exists, err := smt.db.Get(rollupdb.NamespaceSMT, root)
+	currentValue, exists, err := smt.db.Get(smt.dbNamespace, root)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +211,7 @@ func (smt *SparseMerkleTree) sideNodesForRoot(path []byte, root []byte) ([][]byt
 	for i := 0; i < smt.height-1; i++ {
 		if !isLeft(path, i, smt.height) {
 			sideNodes[i] = currentValue[:smt.keySize()]
-			currentValue, exists, err = smt.db.Get(rollupdb.NamespaceSMT, currentValue[smt.keySize():])
+			currentValue, exists, err = smt.db.Get(smt.dbNamespace, currentValue[smt.keySize():])
 			if err != nil {
 				return nil, err
 			}
@@ -218,7 +220,7 @@ func (smt *SparseMerkleTree) sideNodesForRoot(path []byte, root []byte) ([][]byt
 			}
 		} else {
 			sideNodes[i] = currentValue[smt.keySize():]
-			currentValue, exists, err = smt.db.Get(rollupdb.NamespaceSMT, currentValue[:smt.keySize()])
+			currentValue, exists, err = smt.db.Get(smt.dbNamespace, currentValue[:smt.keySize()])
 			if err != nil {
 				return nil, err
 			}

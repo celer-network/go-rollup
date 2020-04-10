@@ -12,7 +12,7 @@ func TestDeepSparseMerkleSubTree(t *testing.T) {
 	dsmstDb := memorydb.NewDB()
 	dsmst := NewDeepSparseMerkleSubTree(dsmstDb, sha256.New(), 256, true)
 	smtDb := memorydb.NewDB()
-	smt, err := NewSparseMerkleTree(smtDb, sha256.New(), nil, 256, true)
+	smt, err := NewSparseMerkleTree(smtDb, namespaceTestTrie, sha256.New(), nil, 256, true)
 	if err != nil {
 		t.Error(err)
 	}

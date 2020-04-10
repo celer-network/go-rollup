@@ -100,7 +100,7 @@ func TestDummyApp(t *testing.T) {
 	checkTxStatus(receipt.Status, "Deploy DummyApp")
 	log.Printf("Deployed DummyApp at 0x%x\n", dummyAppAddress)
 
-	aggregator, err := aggregator.NewAggregator(aggregatorDbDir, aggregatorKeystore)
+	aggregator, err := aggregator.NewAggregator(aggregatorDbDir, aggregatorKeystore, aggregatorKeystore)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,10 +112,12 @@ func TestDummyApp(t *testing.T) {
 	playerOneSig, err := utils.SignData(
 		playerOnePrivateKey,
 		[]string{"address", "address", "uint256", "uint256"},
-		account1Auth.From,
-		dummyAppAddress,
-		big.NewInt(1),
-		big.NewInt(0),
+		[]interface{}{
+			account1Auth.From,
+			dummyAppAddress,
+			big.NewInt(1),
+			big.NewInt(0),
+		},
 	)
 	dummyApp.PlayerOneDeposit(account1Auth, playerOneSig)
 	dummyApp.PlayerTwoWithdraw(account2Auth)

@@ -1,8 +1,9 @@
 package db
 
 var (
-	NamespaceSMT                                          = []byte("smt")
-	NamespaceTrie                                         = []byte("trie")
+	NamespaceAggregatorTrie                               = []byte("at")
+	NamespaceValidatorTrie                                = []byte("vt")
+	NamespaceRollupBlockTrie                              = []byte("rbt")
 	NamespaceTokenAddressToTokenIndex                     = []byte("tatti")
 	NamespaceTokenIndexToTokenAddress                     = []byte("titta")
 	NamespaceMainchainTokenAddressToSidechainTokenAddress = []byte("mtatst")

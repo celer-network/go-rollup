@@ -5,13 +5,18 @@ import (
 	"io/ioutil"
 	"math/big"
 
+	"github.com/celer-network/go-rollup/bridge"
+
+	"github.com/celer-network/go-rollup/db"
+	"github.com/celer-network/go-rollup/validator"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 
-	"github.com/celer-network/go-rollup/db"
+	rollupdb "github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/db/badgerdb"
 	"github.com/celer-network/go-rollup/statemachine"
 	"github.com/celer-network/go-rollup/types"
@@ -20,15 +25,17 @@ import (
 )
 
 type Aggregator struct {
-	db                    db.DB
+	db                    rollupdb.DB
 	stateMachine          *statemachine.StateMachine
 	pendingBlock          *types.RollupBlock
 	txGenerator           *TransactionGenerator
 	blockSubmitter        *BlockSubmitter
+	validator             *validator.Validator
+	bridge                *bridge.Bridge
 	numTransitionsInBlock int
 }
 
-func NewAggregator(dbDir string, mainchainKeystore string) (*Aggregator, error) {
+func NewAggregator(dbDir string, mainchainKeystore string, sidechainKeystore string) (*Aggregator, error) {
 	db, err := badgerdb.NewDB(dbDir)
 	if err != nil {
 		return nil, err
@@ -47,14 +54,32 @@ func NewAggregator(dbDir string, mainchainKeystore string) (*Aggregator, error) 
 		log.Fatal().Err(err).Send()
 		return nil, err
 	}
-	key, err := keystore.DecryptKey(mainchainKeystoreBytes, "")
+	mainchainKey, err := keystore.DecryptKey(mainchainKeystoreBytes, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 		return nil, err
 	}
-	mainchainAuth := bind.NewKeyedTransactor(key.PrivateKey)
+	mainchainAuth := bind.NewKeyedTransactor(mainchainKey.PrivateKey)
+
+	sidechainKeystoreBytes, err := ioutil.ReadFile(sidechainKeystore)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+		return nil, err
+	}
+	sidechainKey, err := keystore.DecryptKey(sidechainKeystoreBytes, "")
+	if err != nil {
+		log.Fatal().Err(err).Send()
+		return nil, err
+	}
+	sidechainAuth := bind.NewKeyedTransactor(sidechainKey.PrivateKey)
 
 	mainchainClient, err := ethclient.Dial(viper.GetString("mainchainEndpoint"))
+	if err != nil {
+		log.Fatal().Err(err).Send()
+		return nil, err
+	}
+
+	sidechainClient, err := ethclient.Dial(viper.GetString("sidechainEndpoint"))
 	if err != nil {
 		log.Fatal().Err(err).Send()
 		return nil, err
@@ -67,17 +92,39 @@ func NewAggregator(dbDir string, mainchainKeystore string) (*Aggregator, error) 
 		return nil, err
 	}
 
-	stateMachine, err := statemachine.NewStateMachine(db, serializer)
+	aggregatorStateMachine, err := statemachine.NewStateMachine(db, rollupdb.NamespaceAggregatorTrie, serializer)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 		return nil, err
 	}
 
+	transactionGenerator := NewTransactionGenerator(db, mainchainClient, rollupChain)
+	blockSubmitter := NewBlockSubmitter(mainchainClient, mainchainAuth, serializer, rollupChain)
+
+	validatorStateMachine, err := statemachine.NewStateMachine(db, rollupdb.NamespaceValidatorTrie, serializer)
+	validator := validator.NewValidator(
+		db,
+		serializer,
+		validatorStateMachine,
+		mainchainClient,
+		mainchainAuth,
+		rollupChain,
+	)
+
+	bridge, err := bridge.NewBridge(
+		mainchainClient,
+		sidechainClient,
+		sidechainAuth,
+		sidechainKey.PrivateKey,
+	)
+
 	return &Aggregator{
 		db:             db,
-		stateMachine:   stateMachine,
-		txGenerator:    NewTransactionGenerator(db, mainchainClient, rollupChain),
-		blockSubmitter: NewBlockSubmitter(mainchainClient, mainchainAuth, serializer, rollupChain),
+		stateMachine:   aggregatorStateMachine,
+		txGenerator:    transactionGenerator,
+		blockSubmitter: blockSubmitter,
+		validator:      validator,
+		bridge:         bridge,
 
 		pendingBlock:          types.NewRollupBlock(0),
 		numTransitionsInBlock: numTransitionsInBlock,
