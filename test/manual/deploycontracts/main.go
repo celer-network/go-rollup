@@ -20,6 +20,4 @@ func main() {
 
 	test.DeployMainchainContracts()
 	test.DeploySidechainContracts()
-
-	<-make(chan bool)
 }

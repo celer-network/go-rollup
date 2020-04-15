@@ -10,7 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/celer-network/go-rollup/db"
+	rollupdb "github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/smt"
 	"github.com/celer-network/go-rollup/types"
 )
@@ -22,15 +22,15 @@ var (
 )
 
 type StateMachine struct {
-	db         db.DB
+	db         rollupdb.DB
 	smt        *smt.SparseMerkleTree
 	serializer *types.Serializer
 }
 
-func NewStateMachine(db db.DB, trieDbNamespace []byte, serializer *types.Serializer) (*StateMachine, error) {
+func NewStateMachine(db rollupdb.DB, serializer *types.Serializer) (*StateMachine, error) {
 	// TODO: restore from db
 
-	smt, err := smt.NewSparseMerkleTree(db, trieDbNamespace, sha3.NewLegacyKeccak256(), nil, stateTreeHeight, false)
+	smt, err := smt.NewSparseMerkleTree(db, rollupdb.NamespaceStateTrie, sha3.NewLegacyKeccak256(), nil, stateTreeHeight, false)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func NewStateMachine(db db.DB, trieDbNamespace []byte, serializer *types.Seriali
 }
 
 func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*types.StateUpdate, error) {
-	log.Print("Apply transaction")
+	log.Debug().Msg("Apply transaction")
 	tx := signedTx.Transaction
 	var accountInfoUpdates []*types.AccountInfoUpdate
 	var err error
@@ -50,19 +50,19 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 	case types.TransactionTypeDeposit:
 		accountInfoUpdates, err = sm.applyDeposit(tx.(*types.DepositTransaction))
 		if err != nil {
-			log.Err(err).Stack().Send()
+			log.Error().Err(err).Stack().Send()
 			return nil, err
 		}
 	case types.TransactionTypeWithdraw:
 		accountInfoUpdates, err = sm.applyWithdraw(tx.(*types.WithdrawTransaction))
 		if err != nil {
-			log.Err(err).Stack().Send()
+			log.Error().Err(err).Stack().Send()
 			return nil, err
 		}
 	case types.TransactionTypeTransfer:
 		accountInfoUpdates, err = sm.applyTransfer(tx.(*types.TransferTransaction))
 		if err != nil {
-			log.Err(err).Stack().Send()
+			log.Error().Err(err).Stack().Send()
 			return nil, err
 		}
 	}
@@ -71,16 +71,18 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 		info := update.Info
 		account := info.Account
 		newAccount := update.NewAccount
-		key, exists, err := sm.db.Get(db.NamespaceAccountAddressToKey, account.Bytes())
+		key, exists, err := sm.db.Get(rollupdb.NamespaceAccountAddressToKey, account.Bytes())
 		if err != nil {
+			log.Error().Err(err).Send()
 			return nil, err
 		}
 		if !exists {
+			log.Error().Err(errAccountNotFound).Send()
 			return nil, errAccountNotFound
 		}
 		proof, proofErr := sm.smt.Prove(key)
 		if proofErr != nil {
-			log.Err(proofErr).Send()
+			log.Error().Err(proofErr).Send()
 			return nil, err
 		}
 		inclusionProof := types.ConvertToInclusionProof(proof)
@@ -91,12 +93,16 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 			NewAccount:     newAccount,
 		})
 	}
+	var stateRoot [32]byte
+	copy(stateRoot[:], sm.smt.Root())
+	log.Debug().
+		Int("transactionType", int(tx.GetTransactionType())).
+		Str("stateRoot", common.Bytes2Hex(stateRoot[:])).Msg("stateroots")
 	return &types.StateUpdate{
 		Transaction: signedTx,
-		StateRoot:   sm.smt.Root(),
+		StateRoot:   stateRoot,
 		Entries:     entries,
 	}, nil
-
 }
 
 func (sm *StateMachine) applyDeposit(tx *types.DepositTransaction) ([]*types.AccountInfoUpdate, error) {
@@ -288,7 +294,7 @@ func (sm *StateMachine) createAccount(address common.Address, numTokens uint64) 
 		Balances: balances,
 		Nonces:   nonces,
 	}
-	lastKeyBytes, exists, err := sm.db.Get(db.NamespaceLastKey, db.EmptyKey)
+	lastKeyBytes, exists, err := sm.db.Get(rollupdb.NamespaceLastKey, rollupdb.EmptyKey)
 	if err != nil {
 		return nil, err
 	}
@@ -304,15 +310,15 @@ func (sm *StateMachine) createAccount(address common.Address, numTokens uint64) 
 	// log.Log().Int("data length", len(data)).Send()
 	// log.Log().Bytes("data", data).Err(err).Msg("createAccount")
 	tx := sm.db.NewTx()
-	err = tx.Set(db.NamespaceLastKey, db.EmptyKey, lastKey.Bytes())
+	err = tx.Set(rollupdb.NamespaceLastKey, rollupdb.EmptyKey, lastKey.Bytes())
 	if err != nil {
 		return nil, err
 	}
-	err = tx.Set(db.NamespaceAccountAddressToKey, address.Bytes(), newKeyBytes)
+	err = tx.Set(rollupdb.NamespaceAccountAddressToKey, address.Bytes(), newKeyBytes)
 	if err != nil {
 		return nil, err
 	}
-	err = tx.Set(db.NamespaceKeyToAccountInfo, newKeyBytes, data)
+	err = tx.Set(rollupdb.NamespaceKeyToAccountInfo, newKeyBytes, data)
 	if err != nil {
 		return nil, err
 	}
@@ -332,21 +338,21 @@ func (sm *StateMachine) createAccount(address common.Address, numTokens uint64) 
 }
 
 func (sm *StateMachine) getAccountInfo(address common.Address) (*types.AccountInfo, error) {
-	key, exists, err := sm.db.Get(db.NamespaceAccountAddressToKey, address.Bytes())
+	key, exists, err := sm.db.Get(rollupdb.NamespaceAccountAddressToKey, address.Bytes())
 	if err != nil {
 		return nil, err
 	}
 	if !exists {
 		return nil, errAccountNotFound
 	}
-	data, exists, err := sm.db.Get(db.NamespaceKeyToAccountInfo, key)
+	data, exists, err := sm.db.Get(rollupdb.NamespaceKeyToAccountInfo, key)
 	if err != nil {
 		return nil, err
 	}
 	if !exists {
 		return nil, errors.New("Corrupt db")
 	}
-	log.Log().Bytes("data", data).Msg("getAccountInfo")
+	//log.Log().Str("data", common.Bytes2Hex(data)).Msg("getAccountInfo")
 	info, err := sm.serializer.DeserializeAccountInfo(data)
 	if err != nil {
 		return nil, err
@@ -359,14 +365,14 @@ func (sm *StateMachine) setAccountInfo(address common.Address, info *types.Accou
 	if err != nil {
 		return err
 	}
-	key, exists, err := sm.db.Get(db.NamespaceAccountAddressToKey, address.Bytes())
+	key, exists, err := sm.db.Get(rollupdb.NamespaceAccountAddressToKey, address.Bytes())
 	if err != nil {
 		return err
 	}
 	if !exists {
 		return errAccountNotFound
 	}
-	err = sm.db.Set(db.NamespaceKeyToAccountInfo, key, data)
+	err = sm.db.Set(rollupdb.NamespaceKeyToAccountInfo, key, data)
 	if err != nil {
 		return err
 	}
@@ -377,7 +383,7 @@ func (sm *StateMachine) setAccountInfo(address common.Address, info *types.Accou
 func (sm *StateMachine) getTokenIndex(tokenAddress common.Address) (uint64, error) {
 	log.Printf("getTokenIndex for %s", tokenAddress.Hex())
 	tokenIndexBytes, exists, err := sm.db.Get(
-		db.NamespaceTokenAddressToTokenIndex,
+		rollupdb.NamespaceTokenAddressToTokenIndex,
 		tokenAddress.Bytes(),
 	)
 	if err != nil {

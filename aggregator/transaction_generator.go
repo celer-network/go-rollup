@@ -17,7 +17,8 @@ const (
 )
 
 type TransactionGenerator struct {
-	db                  db.DB
+	aggregatorDb        db.DB
+	validatorDb         db.DB
 	sidechainClient     *ethclient.Client
 	rollupChain         *rollup.RollupChain
 	rollupTokenRegistry *rollup.RollupTokenRegistry
@@ -26,7 +27,8 @@ type TransactionGenerator struct {
 }
 
 func NewTransactionGenerator(
-	db db.DB,
+	aggregatorDb db.DB,
+	validatorDb db.DB,
 	mainchainClient *ethclient.Client,
 	rollupChain *rollup.RollupChain,
 ) *TransactionGenerator {
@@ -49,7 +51,8 @@ func NewTransactionGenerator(
 	}
 
 	return &TransactionGenerator{
-		db:                  db,
+		aggregatorDb:        aggregatorDb,
+		validatorDb:         validatorDb,
 		sidechainClient:     sidechainClient,
 		rollupChain:         rollupChain,
 		rollupTokenRegistry: rollupTokenRegistry,
@@ -71,7 +74,7 @@ func (tg *TransactionGenerator) watchTransition() {
 	for {
 		select {
 		case event := <-channel:
-			log.Printf("Transition %s", common.Bytes2Hex(event.Data))
+			log.Debug().Int("data length", len(event.Data)).Str("data", common.Bytes2Hex(event.Data)).Msg("Caught Transition")
 		}
 	}
 }
@@ -88,7 +91,7 @@ func (tg *TransactionGenerator) watchRollupTokenRegistry() error {
 		select {
 		case event := <-channel:
 			log.Printf("Registered token %s as %s", event.TokenAddress.Hex(), event.TokenIndex.String())
-			err := tg.db.Set(
+			err := tg.aggregatorDb.Set(
 				db.NamespaceTokenAddressToTokenIndex,
 				event.TokenAddress.Bytes(),
 				event.TokenIndex.Bytes(),
@@ -96,7 +99,23 @@ func (tg *TransactionGenerator) watchRollupTokenRegistry() error {
 			if err != nil {
 				log.Err(err).Send()
 			}
-			err = tg.db.Set(
+			err = tg.validatorDb.Set(
+				db.NamespaceTokenAddressToTokenIndex,
+				event.TokenAddress.Bytes(),
+				event.TokenIndex.Bytes(),
+			)
+			if err != nil {
+				log.Err(err).Send()
+			}
+			err = tg.aggregatorDb.Set(
+				db.NamespaceTokenIndexToTokenAddress,
+				event.TokenIndex.Bytes(),
+				event.TokenAddress.Bytes(),
+			)
+			if err != nil {
+				log.Err(err).Send()
+			}
+			err = tg.validatorDb.Set(
 				db.NamespaceTokenIndexToTokenAddress,
 				event.TokenIndex.Bytes(),
 				event.TokenAddress.Bytes(),
@@ -122,7 +141,14 @@ func (tg *TransactionGenerator) watchTokenMapper() error {
 		case event := <-channel:
 			sidechainErc20Address := event.SidechainToken
 			log.Printf("Mapped token %s to %s", event.MainchainToken.Hex(), event.SidechainToken.Hex())
-			err := tg.db.Set(
+			err := tg.aggregatorDb.Set(
+				db.NamespaceMainchainTokenAddressToSidechainTokenAddress,
+				event.MainchainToken.Bytes(),
+				sidechainErc20Address.Bytes())
+			if err != nil {
+				log.Err(err).Send()
+			}
+			err = tg.validatorDb.Set(
 				db.NamespaceMainchainTokenAddressToSidechainTokenAddress,
 				event.MainchainToken.Bytes(),
 				sidechainErc20Address.Bytes())

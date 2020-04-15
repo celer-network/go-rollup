@@ -1,19 +1,19 @@
 {
-  "address": "e30474f14fff32082ca23d99a89396f134821489",
+  "address": "9584a5cc2d279c2704b549531dbd9c41ccf63287",
   "crypto": {
     "cipher": "aes-128-ctr",
-    "ciphertext": "f5f3bd06ab9c82c2661da381c1c8dc2c461f73b9bb809a9ac216e59df5a07d95",
-    "cipherparams": { "iv": "2ac182df7763063524f171cfab60cd48" },
+    "ciphertext": "08b6a3fe074361401151909fe43f126e33b8c72b52f48f2d94ca2b187eabea02",
+    "cipherparams": { "iv": "9e069cf9d4861baf1c4717a420efd8f3" },
     "kdf": "scrypt",
     "kdfparams": {
       "dklen": 32,
-      "n": 262144,
-      "p": 1,
+      "n": 4096,
+      "p": 6,
       "r": 8,
-      "salt": "7ef95769c337a15cf4266c8ab6991def01c94966d6139765fe6b4fbf891096c3"
+      "salt": "9d1913527522d2bbdbb30aa8d061a80a7c222f8f3d3f55244c51643dca1caf25"
     },
-    "mac": "4628ea49cf799e91e0ea7aecc4584e20b41b1923d936e1baf429bba30e33140e"
+    "mac": "1c77aae744f1f3c72a89a68b86dd9ac463efae53ffceba07edfa50f78c92fe61"
   },
-  "id": "9b8df180-bd6d-4349-93f2-4190f52cffbf",
+  "id": "b32ff5e8-b55c-4e48-bbe4-995ad57c5667",
   "version": 3
 }

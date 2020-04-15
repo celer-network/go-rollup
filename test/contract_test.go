@@ -100,7 +100,7 @@ func TestDummyApp(t *testing.T) {
 	checkTxStatus(receipt.Status, "Deploy DummyApp")
 	log.Printf("Deployed DummyApp at 0x%x\n", dummyAppAddress)
 
-	aggregator, err := aggregator.NewAggregator(aggregatorDbDir, aggregatorKeystore, aggregatorKeystore)
+	aggregator, err := aggregator.NewAggregator(aggregator1DbDir, validator1DbDir, aggregator1Keystore, aggregator1Keystore, false)
 	if err != nil {
 		t.Fatal(err)
 	}

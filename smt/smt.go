@@ -12,7 +12,7 @@ const left = 0
 const right = 1
 
 var (
-	defaultValue = make([]byte, 32)
+	DefaultValue = make([]byte, 32)
 	initMarker   = []byte("init")
 )
 
@@ -49,7 +49,7 @@ func NewSparseMerkleTree(db rollupdb.DB, dbNamespace []byte, hasher hash.Hash, r
 				return nil, err
 			}
 		}
-		err := bulk.Set(dbNamespace, smt.defaultNode(hasherSizeBits-1), defaultValue)
+		err := bulk.Set(dbNamespace, smt.defaultNode(hasherSizeBits-1), DefaultValue)
 		if err != nil {
 			return nil, err
 		}

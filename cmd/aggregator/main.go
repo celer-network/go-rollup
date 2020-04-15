@@ -14,9 +14,11 @@ import (
 
 var (
 	config            = flag.String("config", "/tmp/celer_rollup_test/config", "Config directory")
-	mainDbDir         = flag.String("maindb", "/tmp/celer_rollup_test/db", "Main DB directory")
-	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/aggregator.json", "Mainchain keystore file")
-	sidechainKeystore = flag.String("sidechainkeystore", "env/keystore/aggregator.json", "Sidechain keystore file")
+	aggregatorDbDir   = flag.String("aggregatordb", "/tmp/celer_rollup_test/aggregator1Db", "Aggregator DB directory")
+	validatorDbDir    = flag.String("validatordb", "/tmp/celer_rollup_test/validator1Db", "Validator DB directory")
+	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/node1.json", "Mainchain keystore file")
+	sidechainKeystore = flag.String("sidechainkeystore", "env/keystore/node2.json", "Sidechain keystore file")
+	fraudTransfer     = flag.Bool("fraudtransfer", false, "Submit bad state root for transfers")
 )
 
 func main() {
@@ -32,7 +34,14 @@ func main() {
 	viper.MergeInConfig()
 	viper.SetConfigName("sidechain_contract_addresses")
 	viper.MergeInConfig()
-	aggregator, err := aggregator.NewAggregator(*mainDbDir, *mainchainKeystore, *sidechainKeystore)
+	aggregator, err :=
+		aggregator.NewAggregator(
+			*aggregatorDbDir,
+			*validatorDbDir,
+			*mainchainKeystore,
+			*sidechainKeystore,
+			*fraudTransfer,
+		)
 	if err != nil {
 		os.Exit(1)
 	}

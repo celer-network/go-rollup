@@ -18,7 +18,7 @@ func defaultNodes(hasher hash.Hash) [][]byte {
 		defaultNodesMap[hasher] = make([][]byte, depth)
 		nodes = defaultNodesMap[hasher]
 
-		hasher.Write(defaultValue)
+		hasher.Write(DefaultValue)
 		bottom := hasher.Sum(nil)
 		hasher.Reset()
 

@@ -25,7 +25,8 @@ import (
 )
 
 type Aggregator struct {
-	db                    rollupdb.DB
+	aggregatorDb          rollupdb.DB
+	validatorDb           rollupdb.DB
 	stateMachine          *statemachine.StateMachine
 	pendingBlock          *types.RollupBlock
 	txGenerator           *TransactionGenerator
@@ -33,10 +34,20 @@ type Aggregator struct {
 	validator             *validator.Validator
 	bridge                *bridge.Bridge
 	numTransitionsInBlock int
+	fraudTransfer         bool
 }
 
-func NewAggregator(dbDir string, mainchainKeystore string, sidechainKeystore string) (*Aggregator, error) {
-	db, err := badgerdb.NewDB(dbDir)
+func NewAggregator(
+	aggregatorDbDir string,
+	validatorDbDir string,
+	mainchainKeystore string,
+	sidechainKeystore string,
+	fraudTransfer bool) (*Aggregator, error) {
+	aggregatorDb, err := badgerdb.NewDB(aggregatorDbDir)
+	if err != nil {
+		return nil, err
+	}
+	validatorDb, err := badgerdb.NewDB(validatorDbDir)
 	if err != nil {
 		return nil, err
 	}
@@ -92,18 +103,18 @@ func NewAggregator(dbDir string, mainchainKeystore string, sidechainKeystore str
 		return nil, err
 	}
 
-	aggregatorStateMachine, err := statemachine.NewStateMachine(db, rollupdb.NamespaceAggregatorTrie, serializer)
+	aggregatorStateMachine, err := statemachine.NewStateMachine(aggregatorDb, serializer)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 		return nil, err
 	}
 
-	transactionGenerator := NewTransactionGenerator(db, mainchainClient, rollupChain)
+	transactionGenerator := NewTransactionGenerator(aggregatorDb, validatorDb, mainchainClient, rollupChain)
 	blockSubmitter := NewBlockSubmitter(mainchainClient, mainchainAuth, serializer, rollupChain)
 
-	validatorStateMachine, err := statemachine.NewStateMachine(db, rollupdb.NamespaceValidatorTrie, serializer)
+	validatorStateMachine, err := statemachine.NewStateMachine(validatorDb, serializer)
 	validator := validator.NewValidator(
-		db,
+		validatorDb,
 		serializer,
 		validatorStateMachine,
 		mainchainClient,
@@ -119,7 +130,8 @@ func NewAggregator(dbDir string, mainchainKeystore string, sidechainKeystore str
 	)
 
 	return &Aggregator{
-		db:             db,
+		aggregatorDb:   aggregatorDb,
+		validatorDb:    validatorDb,
 		stateMachine:   aggregatorStateMachine,
 		txGenerator:    transactionGenerator,
 		blockSubmitter: blockSubmitter,
@@ -128,11 +140,13 @@ func NewAggregator(dbDir string, mainchainKeystore string, sidechainKeystore str
 
 		pendingBlock:          types.NewRollupBlock(0),
 		numTransitionsInBlock: numTransitionsInBlock,
+		fraudTransfer:         fraudTransfer,
 	}, nil
 }
 
 func (a *Aggregator) Start() {
 	go a.processTransactions()
+	go a.validator.Start()
 	a.txGenerator.Start()
 }
 
@@ -175,7 +189,7 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 		depositTx := tx.(*types.DepositTransaction)
 		entry := stateUpdate.Entries[0]
 		info := entry.AccountInfo
-		tokenIndex, exists, err := a.db.Get(db.NamespaceTokenAddressToTokenIndex, depositTx.Token.Bytes())
+		tokenIndex, exists, err := a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, depositTx.Token.Bytes())
 		if err != nil {
 			return err
 		}
@@ -210,7 +224,7 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 	case types.TransactionTypeWithdraw:
 		entry := stateUpdate.Entries[0]
 		withdrawTx := tx.(*types.WithdrawTransaction)
-		tokenIndex, exists, err := a.db.Get(db.NamespaceTokenAddressToTokenIndex, withdrawTx.Token.Bytes())
+		tokenIndex, exists, err := a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, withdrawTx.Token.Bytes())
 		if err != nil {
 			return err
 		}
@@ -230,18 +244,25 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 	case types.TransactionTypeTransfer:
 		entries := stateUpdate.Entries
 		transferTx := tx.(*types.TransferTransaction)
-		tokenIndex, exists, err := a.db.Get(db.NamespaceTokenAddressToTokenIndex, transferTx.Token.Bytes())
+		tokenIndex, exists, err := a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, transferTx.Token.Bytes())
 		if err != nil {
 			return err
 		}
 		if !exists {
 			return errors.New("Invalid token")
 		}
+		log.Debug().Uint64("nonce", transferTx.Nonce.Uint64()).Msg("Appending transfer")
+		var stateRoot [32]byte
+		if a.fraudTransfer {
+			stateRoot = [32]byte{}
+		} else {
+			stateRoot = stateUpdate.StateRoot
+		}
 		a.pendingBlock.Transitions = append(
 			a.pendingBlock.Transitions,
 			&types.TransferTransition{
 				TransitionType:     big.NewInt(int64(types.TransitionTypeTransfer)),
-				StateRoot:          stateUpdate.StateRoot,
+				StateRoot:          stateRoot,
 				SenderSlotIndex:    entries[0].SlotIndex,
 				RecipientSlotIndex: entries[1].SlotIndex,
 				TokenIndex:         new(big.Int).SetBytes(tokenIndex),

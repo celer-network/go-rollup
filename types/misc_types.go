@@ -23,7 +23,7 @@ type StateUpdateEntry struct {
 
 type StateUpdate struct {
 	Transaction *SignedTransaction
-	StateRoot   []byte
+	StateRoot   [32]byte
 	Entries     []*StateUpdateEntry
 }
 

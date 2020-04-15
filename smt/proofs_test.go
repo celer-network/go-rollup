@@ -95,7 +95,7 @@ func TestProofs(t *testing.T) {
 		t.Error("error returned when trying to prove inclusion on empty key")
 		t.Log(err)
 	}
-	result = smt.VerifyProof(proof, []byte("testKey3"), defaultValue)
+	result = smt.VerifyProof(proof, []byte("testKey3"), DefaultValue)
 	if !result {
 		t.Error("valid proof on empty key failed to verify")
 	}
@@ -103,7 +103,7 @@ func TestProofs(t *testing.T) {
 	if result {
 		t.Error("invalid proof verification on empty key returned true")
 	}
-	result = smt.VerifyProof(proof, []byte("testKey2"), defaultValue)
+	result = smt.VerifyProof(proof, []byte("testKey2"), DefaultValue)
 	if result {
 		t.Error("invalid proof verification on empty key returned true")
 	}
@@ -144,23 +144,23 @@ func TestProofs(t *testing.T) {
 		rand.Read(badProof[i])
 	}
 
-	result = smt.VerifyProof(badProof2, []byte("testKey3"), defaultValue)
+	result = smt.VerifyProof(badProof2, []byte("testKey3"), DefaultValue)
 	if result {
 		t.Error("invalid proof verification returned true")
 	}
-	result = smt.VerifyProof(badProof3, []byte("testKey3"), defaultValue)
+	result = smt.VerifyProof(badProof3, []byte("testKey3"), DefaultValue)
 	if result {
 		t.Error("invalid proof verification returned true")
 	}
-	result = smt.VerifyProof(badProof4, []byte("testKey3"), defaultValue)
+	result = smt.VerifyProof(badProof4, []byte("testKey3"), DefaultValue)
 	if result {
 		t.Error("invalid proof verification returned true")
 	}
-	result = smt.VerifyProof(badProof5, []byte("testKey3"), defaultValue)
+	result = smt.VerifyProof(badProof5, []byte("testKey3"), DefaultValue)
 	if result {
 		t.Error("invalid proof verification returned true")
 	}
-	result = smt.VerifyProof(badProof6, []byte("testKey3"), defaultValue)
+	result = smt.VerifyProof(badProof6, []byte("testKey3"), DefaultValue)
 	if result {
 		t.Error("invalid proof verification returned true")
 	}

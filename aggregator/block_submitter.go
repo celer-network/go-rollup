@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"math/big"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/celer-network/go-rollup/db/memorydb"
 	"github.com/celer-network/go-rollup/smt"
-	"github.com/minio/sha256-simd"
 	"golang.org/x/crypto/sha3"
 
 	"github.com/celer-network/go-rollup/types"
@@ -43,6 +43,14 @@ func NewBlockSubmitter(
 }
 
 func (bs *BlockSubmitter) submitBlock(pendingBlock *types.RollupBlock) error {
+	aggregatorAddress, err := bs.rollupChain.AggregatorAddress(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	// Hack for now
+	if !bytes.Equal(bs.mainchainAuth.From.Bytes(), aggregatorAddress.Bytes()) {
+		return nil
+	}
 	serializedBlock, err := pendingBlock.SerializeTransactions(bs.serializer)
 	if err != nil {
 		return err
@@ -66,8 +74,8 @@ func (bs *BlockSubmitter) submitBlock(pendingBlock *types.RollupBlock) error {
 	encodedTransitions := make([][]byte, len(transitions))
 	for i, transition := range transitions {
 		encodedTransition, _ := transition.Serialize(bs.serializer)
-		log.Printf("Local encodedTransition %s", common.Bytes2Hex(encodedTransition))
-		log.Printf("Local encodedTransition hash %s", sha256.New().Sum(encodedTransition))
+		log.Debug().Str("encodedTransition", common.Bytes2Hex(encodedTransition)).Send()
+		//log.Printf("Local encodedTransition hash %s", sha3.NewLegacyKeccak256().Sum(encodedTransition))
 		encodedTransitions[i] = encodedTransition
 		_, _ = tree.Update(big.NewInt(int64(i)).Bytes(), encodedTransition)
 	}
