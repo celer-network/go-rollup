@@ -89,7 +89,7 @@ func MapToken(
 	decimals uint8,
 ) {
 	tokenMapperAddress := common.HexToAddress(viper.GetString("tokenMapper"))
-	log.Printf("Mapping %s to %s", tokenMapperAddress.Hex(), token.Hex())
+	log.Printf("Mapping %s", token.Hex())
 	tokenMapper, err := sidechain.NewTokenMapper(tokenMapperAddress, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
@@ -141,10 +141,11 @@ func DepositAndTransfer(
 	}
 	signature, err := utils.SignData(
 		auth1PrivateKey,
-		[]string{"address", "address", "uint256", "uint256"},
+		[]string{"address", "address", "address", "uint256", "uint256"},
 		[]interface{}{
 			auth1.From,
 			auth2.From,
+			token,
 			amount,
 			nonce,
 		},

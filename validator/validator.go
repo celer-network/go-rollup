@@ -345,8 +345,8 @@ func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) er
 	}
 	// transitionEvaluatorAddress := common.HexToAddress(viper.GetString("transitionEvaluator"))
 	// transitionEvaluator, err := rollup.NewTransitionEvaluator(transitionEvaluatorAddress, v.mainchainClient)
-	// log.Debug().Str("preStateTransition", common.Bytes2Hex(proof.PreStateIncludedTransition.Transition)).Send()
-	// stateRoot, slots, err := transitionEvaluator.GetTransitionStateRootAndAccessList(&bind.CallOpts{}, proof.PreStateIncludedTransition.Transition)
+	// log.Debug().Str("invalidIncludedTransition", common.Bytes2Hex(proof.InvalidIncludedTransition.Transition)).Send()
+	// stateRoot, slots, err := transitionEvaluator.GetTransitionStateRootAndAccessList(&bind.CallOpts{}, proof.InvalidIncludedTransition.Transition)
 	// if err != nil {
 	// 	log.Error().Err(err).Msg("Failed to GetTransitionStateRootAndAccessList")
 	// }
@@ -357,6 +357,20 @@ func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) er
 	// 	proof.PreStateIncludedTransition.Transition,
 	// 	proof.InvalidIncludedTransition.Transition,
 	// )
+	// storageSlots := make([]rollup.DataTypesStorageSlot, len(proof.TransitionStorageSlots))
+	// for i, includedSlot := range proof.TransitionStorageSlots {
+	// 	storageSlots[i] = includedSlot.StorageSlot
+	// 	log.Debug().Int("index", i).Uint64("balance0", storageSlots[i].Value.Balances[0].Uint64()).Send()
+	// }
+	// tx, err := transitionEvaluator.EvaluateTransition(
+	// 	v.mainchainAuth,
+	// 	proof.InvalidIncludedTransition.Transition,
+	// 	storageSlots,
+	// )
+	// if err != nil {
+	// 	log.Error().Err(err).Msg("Failed to evaluate transition")
+	// 	return err
+	// }
 
 	tx, err := v.rollupChain.ProveTransitionInvalid(
 		v.mainchainAuth,
@@ -375,5 +389,6 @@ func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) er
 		log.Error().Str("tx", tx.Hash().Hex()).Msg("Failed to submit fraud proof")
 		return errors.New("Failed to submit fraud proof")
 	}
+	log.Debug().Msg("Successfully submitted fraud proof")
 	return nil
 }

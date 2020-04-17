@@ -51,7 +51,13 @@ func SignData(privateKey *ecdsa.PrivateKey, types []string, data []interface{}) 
 	hash := solsha3.SoliditySHA3(types, data)
 	prefixedHash := solsha3.SoliditySHA3WithPrefix(hash)
 	log.Debug().Str("prefixedHash", common.Bytes2Hex(prefixedHash)).Send()
-	return crypto.Sign(prefixedHash, privateKey)
+	sig, err := crypto.Sign(prefixedHash, privateKey)
+	if err != nil {
+		return nil, err
+	}
+	// Use 27/28 for v
+	sig[64] = sig[64] + 27
+	return sig, nil
 }
 
 func generatePrefixedHash(data []byte) []byte {
