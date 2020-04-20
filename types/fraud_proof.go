@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 )
 

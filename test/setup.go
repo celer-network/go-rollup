@@ -13,10 +13,10 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/celer-network/sidechain-contracts/bindings/go/sidechain"
+	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 
 	"github.com/celer-network/go-rollup/utils"
-	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
 	"gopkg.in/yaml.v2"
 
 	"github.com/ethereum/go-ethereum/common"

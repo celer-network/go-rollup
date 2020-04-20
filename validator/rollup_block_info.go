@@ -8,7 +8,7 @@ import (
 	"github.com/celer-network/go-rollup/db/memorydb"
 	"github.com/celer-network/go-rollup/smt"
 	"github.com/celer-network/go-rollup/types"
-	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
 	"golang.org/x/crypto/sha3"
 )
 

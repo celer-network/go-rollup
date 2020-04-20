@@ -20,7 +20,7 @@ import (
 	"github.com/celer-network/go-rollup/db/badgerdb"
 	"github.com/celer-network/go-rollup/statemachine"
 	"github.com/celer-network/go-rollup/types"
-	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
 	"github.com/spf13/viper"
 )
 

@@ -12,7 +12,7 @@ import (
 	"github.com/celer-network/go-rollup/statemachine"
 	"github.com/celer-network/go-rollup/types"
 	"github.com/celer-network/go-rollup/utils"
-	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"

@@ -5,8 +5,8 @@ import (
 	"crypto/ecdsa"
 	"math/big"
 
-	"github.com/celer-network/sidechain-contracts/bindings/go/mainchain/rollup"
-	"github.com/celer-network/sidechain-contracts/bindings/go/sidechain"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/celer-network/go-rollup/utils"

@@ -16,7 +16,7 @@ import (
 
 	"github.com/celer-network/go-rollup/aggregator"
 	"github.com/celer-network/go-rollup/utils"
-	"github.com/celer-network/sidechain-contracts/bindings/go/sidechain"
+	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 )
 
 func TestDummyApp(t *testing.T) {
@@ -100,7 +100,7 @@ func TestDummyApp(t *testing.T) {
 	checkTxStatus(receipt.Status, "Deploy DummyApp")
 	log.Printf("Deployed DummyApp at 0x%x\n", dummyAppAddress)
 
-	aggregator, err := aggregator.NewAggregator(aggregator1DbDir, validator1DbDir, aggregator1Keystore, aggregator1Keystore, false)
+	aggregator, err := aggregator.NewAggregator(aggregator1DbDir, validator1DbDir, node1Keystore, node1Keystore, false)
 	if err != nil {
 		t.Fatal(err)
 	}
