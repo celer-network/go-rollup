@@ -46,12 +46,12 @@ func NewValidator(
 }
 
 func (v *Validator) Start() {
-	go v.watchNewRollupBlock()
+	go v.watchRollupBlockCommitted()
 }
 
-func (v *Validator) watchNewRollupBlock() error {
-	channel := make(chan *rollup.RollupChainNewRollupBlock)
-	sub, err := v.rollupChain.WatchNewRollupBlock(&bind.WatchOpts{}, channel)
+func (v *Validator) watchRollupBlockCommitted() error {
+	channel := make(chan *rollup.RollupChainRollupBlockCommitted)
+	sub, err := v.rollupChain.WatchRollupBlockCommitted(&bind.WatchOpts{}, channel)
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (v *Validator) watchNewRollupBlock() error {
 		select {
 		case event := <-channel:
 			log.Debug().Msg("Caught RollupBlock")
-			rollupBlock, err := v.serializer.DeserializeRollupBlock(event.Block, event.BlockNumber.Uint64())
+			rollupBlock, err := v.serializer.DeserializeRollupBlock(event.BlockNumber.Uint64(), event.Transitions)
 			if err != nil {
 				log.Err(err).Msg("Failed to deserialize block")
 				return err
@@ -108,16 +108,17 @@ func (v *Validator) validateBlock(block *types.RollupBlock) {
 
 }
 
-func (v *Validator) validateTransition(transitionPosition *types.TransitionPosition, transition types.Transition) (*types.LocalFraudProof, error) {
+func (v *Validator) validateTransition(
+	transitionPosition *types.TransitionPosition, transition types.Transition) (*types.LocalFraudProof, error) {
 	snapshots, err := v.getInputStateSnapshots(transition)
 	if err != nil {
 		return nil, err
 	}
-	signedTx, err := v.getTransactionFromTransitionAndSnapshots(transition, snapshots)
+	tx, err := v.getTransactionFromTransitionAndSnapshots(transition, snapshots)
 	if err != nil {
 		return nil, err
 	}
-	_, err = v.stateMachine.ApplyTransaction(signedTx)
+	_, err = v.stateMachine.ApplyTransaction(tx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to apply transaction")
 		return &types.LocalFraudProof{
@@ -146,7 +147,7 @@ func (v *Validator) validateTransition(transitionPosition *types.TransitionPosit
 
 func (v *Validator) getInputStateSnapshots(transition types.Transition) ([]*types.StateSnapshot, error) {
 	switch transition.GetTransitionType() {
-	case types.TransitionTypeInitialDeposit:
+	case types.TransitionTypeCreateAndDeposit:
 		// No StateSnapshot for initial accounts
 		return nil, nil
 	case types.TransitionTypeDeposit:
@@ -189,13 +190,16 @@ func (v *Validator) getInputStateSnapshots(transition types.Transition) ([]*type
 func (v *Validator) getTransactionFromTransitionAndSnapshots(
 	transition types.Transition,
 	snapshots []*types.StateSnapshot,
-) (*types.SignedTransaction, error) {
+) (types.Transaction, error) {
 	var tx types.Transaction
 	switch transition.GetTransitionType() {
-	case types.TransitionTypeInitialDeposit:
-		initialDepositTransition := transition.(*types.InitialDepositTransition)
-		account := initialDepositTransition.Account
-		tokenBytes, exists, err := v.db.Get(db.NamespaceTokenIndexToTokenAddress, initialDepositTransition.TokenIndex.Bytes())
+	case types.TransitionTypeCreateAndDeposit:
+		createAndDepositTransition := transition.(*types.CreateAndDepositTransition)
+		account := createAndDepositTransition.Account
+		tokenBytes, exists, err :=
+			v.db.Get(
+				db.NamespaceTokenIndexToTokenAddress,
+				createAndDepositTransition.TokenIndex.Bytes())
 		if err != nil {
 			return nil, err
 		}
@@ -203,9 +207,10 @@ func (v *Validator) getTransactionFromTransitionAndSnapshots(
 			return nil, errors.New("Invalid token")
 		}
 		tx = &types.DepositTransaction{
-			Account: account,
-			Token:   common.BytesToAddress(tokenBytes),
-			Amount:  initialDepositTransition.Amount,
+			Account:   account,
+			Token:     common.BytesToAddress(tokenBytes),
+			Amount:    createAndDepositTransition.Amount,
+			Signature: createAndDepositTransition.Signature,
 		}
 	case types.TransitionTypeDeposit:
 		depositTransition := transition.(*types.DepositTransition)
@@ -218,9 +223,10 @@ func (v *Validator) getTransactionFromTransitionAndSnapshots(
 			return nil, errors.New("Invalid token")
 		}
 		tx = &types.DepositTransaction{
-			Account: account,
-			Token:   common.BytesToAddress(tokenBytes),
-			Amount:  depositTransition.Amount,
+			Account:   account,
+			Token:     common.BytesToAddress(tokenBytes),
+			Amount:    depositTransition.Amount,
+			Signature: depositTransition.Signature,
 		}
 	case types.TransitionTypeWithdraw:
 		withdrawTransition := transition.(*types.WithdrawTransition)
@@ -233,9 +239,11 @@ func (v *Validator) getTransactionFromTransitionAndSnapshots(
 			return nil, errors.New("Invalid token")
 		}
 		tx = &types.WithdrawTransaction{
-			Account: account,
-			Token:   common.BytesToAddress(tokenBytes),
-			Amount:  withdrawTransition.Amount,
+			Account:   account,
+			Token:     common.BytesToAddress(tokenBytes),
+			Amount:    withdrawTransition.Amount,
+			Nonce:     withdrawTransition.Nonce,
+			Signature: withdrawTransition.Signature,
 		}
 	case types.TransitionTypeTransfer:
 		transferTransition := transition.(*types.TransferTransition)
@@ -257,13 +265,11 @@ func (v *Validator) getTransactionFromTransitionAndSnapshots(
 			Token:     common.BytesToAddress(tokenBytes),
 			Amount:    transferTransition.Amount,
 			Nonce:     nonce,
+			Signature: transition.GetSignature(),
 		}
 	}
 
-	return &types.SignedTransaction{
-		Signature:   transition.GetSignature(),
-		Transaction: tx,
-	}, nil
+	return tx, nil
 }
 
 func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFraudProof *types.LocalFraudProof) (*types.ContractFraudProof, error) {
@@ -274,9 +280,10 @@ func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFr
 		storageSlot := rollup.DataTypesStorageSlot{
 			SlotIndex: input.SlotIndex,
 			Value: rollup.DataTypesAccountInfo{
-				Account:  inputAccountInfo.Account,
-				Balances: inputAccountInfo.Balances,
-				Nonces:   inputAccountInfo.Nonces,
+				Account:        inputAccountInfo.Account,
+				Balances:       inputAccountInfo.Balances,
+				TransferNonces: inputAccountInfo.TransferNonces,
+				WithdrawNonces: inputAccountInfo.WithdrawNonces,
 			},
 		}
 		transitionStorageSlots[i] = rollup.DataTypesIncludedStorageSlot{
@@ -335,12 +342,12 @@ func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFr
 
 func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) error {
 	v.mainchainAuth.GasLimit = 10000000
-	aggregatorAddress, err := v.rollupChain.AggregatorAddress(&bind.CallOpts{})
+	committerAddress, err := v.rollupChain.CommitterAddress(&bind.CallOpts{})
 	if err != nil {
 		return err
 	}
 	// Hack for now
-	if bytes.Equal(v.mainchainAuth.From.Bytes(), aggregatorAddress.Bytes()) {
+	if bytes.Equal(v.mainchainAuth.From.Bytes(), committerAddress.Bytes()) {
 		return nil
 	}
 	// transitionEvaluatorAddress := common.HexToAddress(viper.GetString("transitionEvaluator"))

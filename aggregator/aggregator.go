@@ -97,7 +97,8 @@ func NewAggregator(
 	}
 
 	rollupChainAddress := viper.GetString("rollupChain")
-	rollupChain, err := rollup.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
+	rollupChain, err :=
+		rollup.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 		return nil, err
@@ -109,8 +110,15 @@ func NewAggregator(
 		return nil, err
 	}
 
-	transactionGenerator := NewTransactionGenerator(aggregatorDb, validatorDb, mainchainClient, rollupChain)
-	blockSubmitter := NewBlockSubmitter(mainchainClient, mainchainAuth, serializer, rollupChain)
+	transactionGenerator :=
+		NewTransactionGenerator(aggregatorDb, validatorDb, mainchainClient, rollupChain)
+	blockSubmitter :=
+		NewBlockSubmitter(
+			mainchainClient,
+			mainchainAuth,
+			mainchainKey.PrivateKey,
+			serializer,
+			rollupChain)
 
 	validatorStateMachine, err := statemachine.NewStateMachine(validatorDb, serializer)
 	validator := validator.NewValidator(
@@ -157,18 +165,20 @@ func (a *Aggregator) processTransactions() {
 	}
 }
 
-func (a *Aggregator) applyTransaction(signedTransaction *types.SignedTransaction) (*types.SignedStateReceipt, error) {
-	stateUpdate, err := a.stateMachine.ApplyTransaction(signedTransaction)
+func (a *Aggregator) applyTransaction(tx types.Transaction) (*types.SignedStateReceipt, error) {
+	stateUpdate, err := a.stateMachine.ApplyTransaction(tx)
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Adding to pending block %d", signedTransaction.Transaction.GetTransactionType())
-	err = a.addToPendingBlock(stateUpdate, signedTransaction)
+	log.Printf("Adding to pending block %d", tx.GetTransactionType())
+	err = a.addToPendingBlock(stateUpdate, tx)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debug().Int("numPendingTxn", len(a.pendingBlock.Transitions)).Int("numTxnInBlock", a.numTransitionsInBlock).Send()
+	log.Debug().
+		Int("numPendingTxn", len(a.pendingBlock.Transitions)).
+		Int("numTxnInBlock", a.numTransitionsInBlock).Send()
 	if len(a.pendingBlock.Transitions) >= a.numTransitionsInBlock {
 		submitErr := a.blockSubmitter.submitBlock(a.pendingBlock)
 		if submitErr != nil {
@@ -182,14 +192,14 @@ func (a *Aggregator) applyTransaction(signedTransaction *types.SignedTransaction
 	return nil, nil
 }
 
-func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx *types.SignedTransaction) error {
-	tx := signedTx.Transaction
+func (a *Aggregator) addToPendingBlock(
+	stateUpdate *types.StateUpdate, tx types.Transaction) error {
 	switch tx.GetTransactionType() {
 	case types.TransactionTypeDeposit:
 		depositTx := tx.(*types.DepositTransaction)
 		entry := stateUpdate.Entries[0]
-		info := entry.AccountInfo
-		tokenIndex, exists, err := a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, depositTx.Token.Bytes())
+		tokenIndex, exists, err :=
+			a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, depositTx.Token.Bytes())
 		if err != nil {
 			return err
 		}
@@ -199,14 +209,14 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 		if entry.NewAccount {
 			a.pendingBlock.Transitions = append(
 				a.pendingBlock.Transitions,
-				&types.InitialDepositTransition{
-					TransitionType:   big.NewInt(int64(types.TransitionTypeInitialDeposit)),
+				&types.CreateAndDepositTransition{
+					TransitionType:   big.NewInt(int64(types.TransitionTypeCreateAndDeposit)),
 					StateRoot:        stateUpdate.StateRoot,
 					AccountSlotIndex: entry.SlotIndex,
-					Account:          info.Account,
+					Account:          entry.AccountInfo.Account,
 					TokenIndex:       new(big.Int).SetBytes(tokenIndex),
 					Amount:           depositTx.Amount,
-					Signature:        signedTx.Signature,
+					Signature:        depositTx.Signature,
 				})
 		} else {
 			a.pendingBlock.Transitions = append(
@@ -217,14 +227,15 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 					AccountSlotIndex: entry.SlotIndex,
 					TokenIndex:       new(big.Int).SetBytes(tokenIndex),
 					Amount:           depositTx.Amount,
-					Signature:        signedTx.Signature,
+					Signature:        depositTx.Signature,
 				})
 
 		}
 	case types.TransactionTypeWithdraw:
 		entry := stateUpdate.Entries[0]
 		withdrawTx := tx.(*types.WithdrawTransaction)
-		tokenIndex, exists, err := a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, withdrawTx.Token.Bytes())
+		tokenIndex, exists, err :=
+			a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, withdrawTx.Token.Bytes())
 		if err != nil {
 			return err
 		}
@@ -239,12 +250,14 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 				AccountSlotIndex: entry.SlotIndex,
 				TokenIndex:       new(big.Int).SetBytes(tokenIndex),
 				Amount:           withdrawTx.Amount,
-				Signature:        signedTx.Signature,
+				Nonce:            withdrawTx.Nonce,
+				Signature:        withdrawTx.Signature,
 			})
 	case types.TransactionTypeTransfer:
 		entries := stateUpdate.Entries
 		transferTx := tx.(*types.TransferTransaction)
-		tokenIndex, exists, err := a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, transferTx.Token.Bytes())
+		tokenIndex, exists, err :=
+			a.aggregatorDb.Get(db.NamespaceTokenAddressToTokenIndex, transferTx.Token.Bytes())
 		if err != nil {
 			return err
 		}
@@ -258,18 +271,35 @@ func (a *Aggregator) addToPendingBlock(stateUpdate *types.StateUpdate, signedTx 
 		} else {
 			stateRoot = stateUpdate.StateRoot
 		}
-		a.pendingBlock.Transitions = append(
-			a.pendingBlock.Transitions,
-			&types.TransferTransition{
-				TransitionType:     big.NewInt(int64(types.TransitionTypeTransfer)),
-				StateRoot:          stateRoot,
-				SenderSlotIndex:    entries[0].SlotIndex,
-				RecipientSlotIndex: entries[1].SlotIndex,
-				TokenIndex:         new(big.Int).SetBytes(tokenIndex),
-				Amount:             transferTx.Amount,
-				Nonce:              transferTx.Nonce,
-				Signature:          signedTx.Signature,
-			})
+		if entries[1].NewAccount {
+			a.pendingBlock.Transitions = append(
+				a.pendingBlock.Transitions,
+				&types.CreateAndTransferTransition{
+					TransitionType:     big.NewInt(int64(types.TransitionTypeTransfer)),
+					StateRoot:          stateRoot,
+					SenderSlotIndex:    entries[0].SlotIndex,
+					RecipientSlotIndex: entries[1].SlotIndex,
+					Recipient:          entries[1].AccountInfo.Account,
+					TokenIndex:         new(big.Int).SetBytes(tokenIndex),
+					Amount:             transferTx.Amount,
+					Nonce:              transferTx.Nonce,
+					Signature:          transferTx.Signature,
+				})
+
+		} else {
+			a.pendingBlock.Transitions = append(
+				a.pendingBlock.Transitions,
+				&types.TransferTransition{
+					TransitionType:     big.NewInt(int64(types.TransitionTypeTransfer)),
+					StateRoot:          stateRoot,
+					SenderSlotIndex:    entries[0].SlotIndex,
+					RecipientSlotIndex: entries[1].SlotIndex,
+					TokenIndex:         new(big.Int).SetBytes(tokenIndex),
+					Amount:             transferTx.Amount,
+					Nonce:              transferTx.Nonce,
+					Signature:          transferTx.Signature,
+				})
+		}
 	}
 	return nil
 }

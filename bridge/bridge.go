@@ -61,7 +61,7 @@ func (b *Bridge) relayDeposit(
 	if err != nil {
 		return err
 	}
-	signature, err := utils.SignData(
+	signature, err := utils.SignPackedData(
 		b.sidechainAuthPrivateKey,
 		[]string{"address", "uint256"},
 		[]interface{}{account, amount},
@@ -84,8 +84,8 @@ func (b *Bridge) relayDeposit(
 }
 
 func (b *Bridge) watchMainchainDeposit() {
-	depositChannel := make(chan *rollup.DepositWithdrawManagerDeposit)
-	b.depositWithdrawManager.WatchDeposit(&bind.WatchOpts{}, depositChannel)
+	depositChannel := make(chan *rollup.DepositWithdrawManagerTokenDeposited)
+	b.depositWithdrawManager.WatchTokenDeposited(&bind.WatchOpts{}, depositChannel)
 	for {
 		select {
 		case event := <-depositChannel:

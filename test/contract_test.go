@@ -109,7 +109,7 @@ func TestDummyApp(t *testing.T) {
 
 	dummyApp, err := sidechain.NewDummyApp(dummyAppAddress, sidechainConn)
 	playerOnePrivateKey, err := utils.GetPrivateKayFromKeystore(account1Keystore, "")
-	playerOneSig, err := utils.SignData(
+	playerOneSig, err := utils.SignPackedData(
 		playerOnePrivateKey,
 		[]string{"address", "address", "uint256", "uint256"},
 		[]interface{}{

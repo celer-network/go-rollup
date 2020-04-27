@@ -3,6 +3,7 @@ package aggregator
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"errors"
 	"math/big"
 
@@ -22,41 +23,50 @@ import (
 )
 
 type BlockSubmitter struct {
-	mainchainClient *ethclient.Client
-	mainchainAuth   *bind.TransactOpts
-	serializer      *types.Serializer
-	rollupChain     *rollup.RollupChain
+	mainchainClient         *ethclient.Client
+	mainchainAuth           *bind.TransactOpts
+	mainchainAuthPrivateKey *ecdsa.PrivateKey
+	serializer              *types.Serializer
+	rollupChain             *rollup.RollupChain
 }
 
 func NewBlockSubmitter(
 	mainchainClient *ethclient.Client,
 	mainchainAuth *bind.TransactOpts,
+	mainchainAuthPrivatekey *ecdsa.PrivateKey,
 	serializer *types.Serializer,
 	rollupChain *rollup.RollupChain,
 ) *BlockSubmitter {
 	return &BlockSubmitter{
-		mainchainClient: mainchainClient,
-		mainchainAuth:   mainchainAuth,
-		serializer:      serializer,
-		rollupChain:     rollupChain,
+		mainchainClient:         mainchainClient,
+		mainchainAuth:           mainchainAuth,
+		mainchainAuthPrivateKey: mainchainAuthPrivatekey,
+		serializer:              serializer,
+		rollupChain:             rollupChain,
 	}
 }
 
 func (bs *BlockSubmitter) submitBlock(pendingBlock *types.RollupBlock) error {
-	aggregatorAddress, err := bs.rollupChain.AggregatorAddress(&bind.CallOpts{})
+	committerAddress, err := bs.rollupChain.CommitterAddress(&bind.CallOpts{})
 	if err != nil {
 		return err
 	}
 	// Hack for now
-	if !bytes.Equal(bs.mainchainAuth.From.Bytes(), aggregatorAddress.Bytes()) {
+	if !bytes.Equal(bs.mainchainAuth.From.Bytes(), committerAddress.Bytes()) {
 		return nil
 	}
-	serializedBlock, err := pendingBlock.SerializeTransactions(bs.serializer)
+	serializedTransitions, serializedBlock, err := pendingBlock.SerializeForSubmission(bs.serializer)
 	if err != nil {
 		return err
 	}
+	signature, err := utils.SignData(bs.mainchainAuthPrivateKey, serializedBlock)
 	log.Print("Submitting block ", pendingBlock.BlockNumber)
-	tx, err := bs.rollupChain.SubmitBlock(bs.mainchainAuth, serializedBlock)
+	tx, err :=
+		bs.rollupChain.CommitBlock(
+			bs.mainchainAuth,
+			new(big.Int).SetUint64(pendingBlock.BlockNumber),
+			serializedTransitions,
+			[][]byte{signature})
 	if err != nil {
 		return err
 	}
@@ -82,4 +92,9 @@ func (bs *BlockSubmitter) submitBlock(pendingBlock *types.RollupBlock) error {
 	log.Printf("Local block root hash: %s", common.Bytes2Hex(tree.Root()))
 
 	return nil
+}
+
+func (bs *BlockSubmitter) signBlock(serializedBlock []byte) ([]byte, error) {
+	return utils.SignData(bs.mainchainAuthPrivateKey, serializedBlock)
+
 }

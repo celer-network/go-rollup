@@ -7,6 +7,7 @@ import (
 type typeRegistry struct {
 	addressTy      abi.Type
 	bytesTy        abi.Type
+	bytesSliceTy   abi.Type
 	bytes32Ty      abi.Type
 	bytes32SliceTy abi.Type
 	uint256Ty      abi.Type
@@ -19,6 +20,10 @@ func newTypeRegistry() (*typeRegistry, error) {
 		return nil, err
 	}
 	bytesTy, err := abi.NewType("bytes", "", nil)
+	if err != nil {
+		return nil, err
+	}
+	bytesSliceTy, err := abi.NewType("bytes[]", "", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +46,7 @@ func newTypeRegistry() (*typeRegistry, error) {
 	return &typeRegistry{
 		addressTy:      addressTy,
 		bytesTy:        bytesTy,
+		bytesSliceTy:   bytesSliceTy,
 		bytes32Ty:      bytes32Ty,
 		bytes32SliceTy: bytes32SliceTy,
 		uint256Ty:      uint256Ty,

@@ -11,9 +11,10 @@ import (
 type TransitionType int
 
 const (
-	TransitionTypeInitialDeposit TransitionType = iota
+	TransitionTypeCreateAndDeposit TransitionType = iota
 	TransitionTypeDeposit
 	TransitionTypeWithdraw
+	TransitionTypeCreateAndTransfer
 	TransitionTypeTransfer
 )
 
@@ -24,7 +25,7 @@ type Transition interface {
 	Serialize(*Serializer) ([]byte, error)
 }
 
-type InitialDepositTransition struct {
+type CreateAndDepositTransition struct {
 	TransitionType   *big.Int
 	StateRoot        [32]byte
 	AccountSlotIndex *big.Int
@@ -34,19 +35,19 @@ type InitialDepositTransition struct {
 	Signature        []byte
 }
 
-func (*InitialDepositTransition) GetTransitionType() TransitionType {
-	return TransitionTypeInitialDeposit
+func (*CreateAndDepositTransition) GetTransitionType() TransitionType {
+	return TransitionTypeCreateAndDeposit
 }
 
-func (t *InitialDepositTransition) GetSignature() []byte {
+func (t *CreateAndDepositTransition) GetSignature() []byte {
 	return t.Signature
 }
 
-func (t *InitialDepositTransition) GetStateRoot() [32]byte {
+func (t *CreateAndDepositTransition) GetStateRoot() [32]byte {
 	return t.StateRoot
 }
 
-func createInitialDepositTransitionArguments(r *typeRegistry) abi.Arguments {
+func createCreateAndDepositTransitionArguments(r *typeRegistry) abi.Arguments {
 	return abi.Arguments([]abi.Argument{
 		{Name: "transitionType", Type: r.uint256Ty, Indexed: false},
 		{Name: "stateRoot", Type: r.bytes32Ty, Indexed: false},
@@ -58,10 +59,10 @@ func createInitialDepositTransitionArguments(r *typeRegistry) abi.Arguments {
 	})
 }
 
-func (transition *InitialDepositTransition) Serialize(s *Serializer) ([]byte, error) {
+func (transition *CreateAndDepositTransition) Serialize(s *Serializer) ([]byte, error) {
 	var stateRoot [32]byte
 	copy(stateRoot[:], transition.StateRoot[:])
-	data, err := s.initialDepositTransitionArguments.Pack(
+	data, err := s.createAndDepositTransitionArguments.Pack(
 		transition.TransitionType,
 		stateRoot,
 		transition.AccountSlotIndex,
@@ -73,11 +74,12 @@ func (transition *InitialDepositTransition) Serialize(s *Serializer) ([]byte, er
 	return data, err
 }
 
-func (s *Serializer) DeserializeInitialDepositTransition(data []byte) (*InitialDepositTransition, error) {
-	var transition InitialDepositTransition
-	err := s.initialDepositTransitionArguments.Unpack(&transition, data)
+func (s *Serializer) DeserializeCreateAndDepositTransition(
+	data []byte) (*CreateAndDepositTransition, error) {
+	var transition CreateAndDepositTransition
+	err := s.createAndDepositTransitionArguments.Unpack(&transition, data)
 	if err != nil {
-		return nil, fmt.Errorf("Deserialize InitialDepositTransition, data %v: %w", data, err)
+		return nil, fmt.Errorf("Deserialize CreateAndDepositTransition, data %v: %w", data, err)
 	}
 	return &transition, nil
 }
@@ -142,6 +144,7 @@ type WithdrawTransition struct {
 	AccountSlotIndex *big.Int
 	TokenIndex       *big.Int
 	Amount           *big.Int
+	Nonce            *big.Int
 	Signature        []byte
 }
 
@@ -164,6 +167,7 @@ func createWithdrawTransitionArguments(r *typeRegistry) abi.Arguments {
 		{Name: "accountSlotIndex", Type: r.uint256Ty, Indexed: false},
 		{Name: "tokenIndex", Type: r.uint256Ty, Indexed: false},
 		{Name: "amount", Type: r.uint256Ty, Indexed: false},
+		{Name: "nonce", Type: r.uint256Ty, Indexed: false},
 		{Name: "signature", Type: r.bytesTy, Indexed: false},
 	})
 }
@@ -177,6 +181,7 @@ func (transition *WithdrawTransition) Serialize(s *Serializer) ([]byte, error) {
 		transition.AccountSlotIndex,
 		transition.TokenIndex,
 		transition.Amount,
+		transition.Nonce,
 		transition.Signature,
 	)
 }
@@ -186,6 +191,70 @@ func (s *Serializer) DeserializeWithdrawTransition(data []byte) (*WithdrawTransi
 	err := s.withdrawTransitionArguments.Unpack(&transition, data)
 	if err != nil {
 		return nil, fmt.Errorf("Deserialize WithdrawTransition, data %v: %w", data, err)
+	}
+	return &transition, nil
+}
+
+type CreateAndTransferTransition struct {
+	TransitionType     *big.Int
+	StateRoot          [32]byte
+	SenderSlotIndex    *big.Int
+	RecipientSlotIndex *big.Int
+	Recipient          common.Address
+	TokenIndex         *big.Int
+	Amount             *big.Int
+	Nonce              *big.Int
+	Signature          []byte
+}
+
+func (*CreateAndTransferTransition) GetTransitionType() TransitionType {
+	return TransitionTypeCreateAndTransfer
+}
+
+func (t *CreateAndTransferTransition) GetSignature() []byte {
+	return t.Signature
+}
+
+func (t *CreateAndTransferTransition) GetStateRoot() [32]byte {
+	return t.StateRoot
+}
+
+func createCreateAndTransferTransitionArguments(r *typeRegistry) abi.Arguments {
+	return abi.Arguments([]abi.Argument{
+		{Name: "transitionType", Type: r.uint256Ty, Indexed: false},
+		{Name: "stateRoot", Type: r.bytes32Ty, Indexed: false},
+		{Name: "senderSlotIndex", Type: r.uint256Ty, Indexed: false},
+		{Name: "recipientSlotIndex", Type: r.uint256Ty, Indexed: false},
+		{Name: "recipient", Type: r.addressTy, Indexed: false},
+		{Name: "tokenIndex", Type: r.uint256Ty, Indexed: false},
+		{Name: "amount", Type: r.uint256Ty, Indexed: false},
+		{Name: "nonce", Type: r.uint256Ty, Indexed: false},
+		{Name: "signature", Type: r.bytesTy, Indexed: false},
+	})
+}
+
+func (transition *CreateAndTransferTransition) Serialize(s *Serializer) ([]byte, error) {
+	var stateRoot [32]byte
+	copy(stateRoot[:], transition.StateRoot[:])
+	return s.transferTransitionArguments.Pack(
+		transition.TransitionType,
+		stateRoot,
+		transition.SenderSlotIndex,
+		transition.RecipientSlotIndex,
+		transition.Recipient,
+		transition.TokenIndex,
+		transition.Amount,
+		transition.Nonce,
+		transition.Signature,
+	)
+}
+
+func (s *Serializer) DeserializeCreateAndTransferTransition(
+	data []byte) (*CreateAndTransferTransition, error) {
+	var transition CreateAndTransferTransition
+	err := s.createAndTransferTransitionArguments.Unpack(&transition, data)
+	if err != nil {
+		return nil, fmt.Errorf("Deserialize CreateAndTransferTransition, data %v: %w", data, err)
 	}
 	return &transition, nil
 }
@@ -253,12 +322,14 @@ func (s *Serializer) DeserializeTransferTransition(data []byte) (*TransferTransi
 func (s *Serializer) DeserializeTransition(data []byte) (Transition, error) {
 	transitionType := new(big.Int).SetBytes(data[0:32]).Uint64()
 	switch TransitionType(transitionType) {
-	case TransitionTypeInitialDeposit:
-		return s.DeserializeInitialDepositTransition(data)
+	case TransitionTypeCreateAndDeposit:
+		return s.DeserializeCreateAndDepositTransition(data)
 	case TransitionTypeDeposit:
 		return s.DeserializeDepositTransition(data)
 	case TransitionTypeWithdraw:
 		return s.DeserializeWithdrawTransition(data)
+	case TransitionTypeCreateAndTransfer:
+		return s.DeserializeCreateAndTransferTransition(data)
 	case TransitionTypeTransfer:
 		return s.DeserializeTransferTransition(data)
 	}

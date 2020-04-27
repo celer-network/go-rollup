@@ -41,9 +41,8 @@ func NewStateMachine(db rollupdb.DB, serializer *types.Serializer) (*StateMachin
 	}, nil
 }
 
-func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*types.StateUpdate, error) {
+func (sm *StateMachine) ApplyTransaction(tx types.Transaction) (*types.StateUpdate, error) {
 	log.Debug().Msg("Apply transaction")
-	tx := signedTx.Transaction
 	var accountInfoUpdates []*types.AccountInfoUpdate
 	var err error
 	switch tx.GetTransactionType() {
@@ -99,7 +98,7 @@ func (sm *StateMachine) ApplyTransaction(signedTx *types.SignedTransaction) (*ty
 		Int("transactionType", int(tx.GetTransactionType())).
 		Str("stateRoot", common.Bytes2Hex(stateRoot[:])).Msg("stateroots")
 	return &types.StateUpdate{
-		Transaction: signedTx,
+		Transaction: tx,
 		StateRoot:   stateRoot,
 		Entries:     entries,
 	}, nil
@@ -111,12 +110,7 @@ func (sm *StateMachine) applyDeposit(tx *types.DepositTransaction) ([]*types.Acc
 		return nil, err
 	}
 
-	// Validations
-	amount := tx.Amount
-	if amount.Cmp(big.NewInt(0)) == -1 {
-		return nil, errors.New("Invalid amount")
-	}
-
+	// Create account if not existent
 	account := tx.Account
 	accountInfo, err := sm.getAccountInfo(account)
 	newAccount := false
@@ -132,24 +126,33 @@ func (sm *StateMachine) applyDeposit(tx *types.DepositTransaction) ([]*types.Acc
 			return nil, err
 		}
 	}
-	// TODO: Check nonce
+
+	// Validations
+	amount := tx.Amount
+	if amount.Cmp(big.NewInt(0)) == -1 {
+		return nil, errors.New("Invalid amount")
+	}
+
+	// TODO: Check validator signature
+	// TODO: nonce?
 
 	// Updates
-	balances, nonces := maybeExpandBalancesNonces(tokenIndex, accountInfo)
-	balance := balances[tokenIndex]
-	balance.Add(balance, amount)
-	balances[tokenIndex] = balance
+	balances, transferNonces, withdrawNonces := maybeExpandAccountInfo(tokenIndex, accountInfo)
+	oldBalance := balances[tokenIndex]
+	newBalance := new(big.Int).Add(oldBalance, amount)
+	balances[tokenIndex] = newBalance
 	updatedAccount := &types.AccountInfo{
-		Account:  account,
-		Balances: balances,
-		Nonces:   nonces,
+		Account:        account,
+		Balances:       balances,
+		TransferNonces: transferNonces,
+		WithdrawNonces: withdrawNonces,
 	}
 	err = sm.setAccountInfo(account, updatedAccount)
 	if err != nil {
 		return nil, err
 	}
 	return []*types.AccountInfoUpdate{
-		&types.AccountInfoUpdate{
+		{
 			Info:       updatedAccount,
 			NewAccount: newAccount,
 		}}, nil
@@ -171,29 +174,41 @@ func (sm *StateMachine) applyWithdraw(tx *types.WithdrawTransaction) ([]*types.A
 	if amount.Cmp(big.NewInt(0)) == -1 {
 		return nil, errors.New("Invalid amount")
 	}
-	// TODO: Check nonce
+
 	if int(tokenIndex) > len(accountInfo.Balances)-1 {
 		return nil, errors.New("Insufficient balance")
 	}
-	balance := accountInfo.Balances[tokenIndex]
-	if balance.Cmp(amount) == -1 {
+	oldBalance := accountInfo.Balances[tokenIndex]
+	if oldBalance.Cmp(amount) == -1 {
 		return nil, errors.New("Insufficient balance")
 	}
 
+	withdrawNonces := accountInfo.WithdrawNonces
+	oldWithdrawNonce := withdrawNonces[tokenIndex]
+	if oldWithdrawNonce.Cmp(tx.Nonce) != 0 {
+		err := fmt.Errorf("Invalid nonce, required %d got %d", oldWithdrawNonce.Uint64(), tx.Nonce.Uint64())
+		return nil, err
+	}
+	newWithdrawNonce := new(big.Int).Add(oldWithdrawNonce, big.NewInt(1))
+	accountInfo.WithdrawNonces[tokenIndex] = newWithdrawNonce
+
+	// TODO: Check signature
+
 	// Updates
-	balance.Sub(balance, amount)
-	accountInfo.Balances[tokenIndex] = balance
+	newBalance := new(big.Int).Sub(oldBalance, amount)
+	accountInfo.Balances[tokenIndex] = newBalance
 	updatedAccount := &types.AccountInfo{
-		Account:  account,
-		Balances: accountInfo.Balances,
-		Nonces:   accountInfo.Nonces,
+		Account:        account,
+		Balances:       accountInfo.Balances,
+		TransferNonces: accountInfo.TransferNonces,
+		WithdrawNonces: accountInfo.WithdrawNonces,
 	}
 	err = sm.setAccountInfo(account, updatedAccount)
 	if err != nil {
 		return nil, err
 	}
 	return []*types.AccountInfoUpdate{
-		&types.AccountInfoUpdate{
+		{
 			Info:       updatedAccount,
 			NewAccount: false,
 		}}, nil
@@ -205,14 +220,26 @@ func (sm *StateMachine) applyTransfer(tx *types.TransferTransaction) ([]*types.A
 		return nil, err
 	}
 
+	// Create account for recipient if not existent
+	recipient := tx.Recipient
+	recipientAccountInfo, err := sm.getAccountInfo(recipient)
+	newRecipient := false
+	if err != nil {
+		if errors.Is(err, errAccountNotFound) {
+			var createErr error
+			recipientAccountInfo, createErr = sm.createAccount(recipient, tokenIndex+1)
+			if createErr != nil {
+				return nil, err
+			}
+			newRecipient = true
+		} else {
+			return nil, err
+		}
+	}
+
 	// Validations
 	sender := tx.Sender
-	recipient := tx.Recipient
 	senderAccountInfo, err := sm.getAccountInfo(sender)
-	if err != nil {
-		return nil, err
-	}
-	recipientAccountInfo, err := sm.getAccountInfo(recipient)
 	if err != nil {
 		return nil, err
 	}
@@ -222,42 +249,47 @@ func (sm *StateMachine) applyTransfer(tx *types.TransferTransaction) ([]*types.A
 	}
 
 	senderBalances := senderAccountInfo.Balances
-	senderNonces := senderAccountInfo.Nonces
+	senderTransferNonces := senderAccountInfo.TransferNonces
 	tokenIndexInt := int(tokenIndex)
 	log.Debug().Int("senderBalancesLength", len(senderBalances)).Interface("senderBalances", senderBalances).Send()
 	if tokenIndexInt > len(senderBalances) {
 		return nil, errors.New("Sender no such token")
 	}
 
-	nonce := senderNonces[tokenIndex]
-	requiredNonce := nonce.Add(nonce, big.NewInt(1))
-	if requiredNonce.Cmp(tx.Nonce) != 0 {
-		err := fmt.Errorf("Invalid nonce, required %d got %d", requiredNonce.Uint64(), tx.Nonce.Uint64())
+	oldTransferNonce := senderTransferNonces[tokenIndex]
+	if oldTransferNonce.Cmp(tx.Nonce) != 0 {
+		err := fmt.Errorf("Invalid nonce, required %d got %d", oldTransferNonce.Uint64(), tx.Nonce.Uint64())
 		return nil, err
 	}
-	senderBalance := senderBalances[tokenIndex]
-	if senderBalance.Cmp(amount) == -1 {
+	newTransferNonce := new(big.Int).Add(oldTransferNonce, big.NewInt(1))
+	oldSenderBalance := senderBalances[tokenIndex]
+	if oldSenderBalance.Cmp(amount) == -1 {
 		return nil, errors.New("Insufficient balance")
 	}
 
-	// Updates
-	recipientBalances, recipientNonces := maybeExpandBalancesNonces(tokenIndex, recipientAccountInfo)
-	senderBalance.Sub(senderBalance, amount)
-	recipientBalance := recipientBalances[tokenIndex]
-	recipientBalance.Add(recipientBalance, amount)
+	// TODO: Check signature
 
-	senderBalances[tokenIndex] = senderBalance
-	senderNonces[tokenIndex] = nonce
-	recipientBalances[tokenIndex] = recipientBalance
+	// Updates
+	recipientBalances, recipientTransferNonces, recipientWithdrawNonces :=
+		maybeExpandAccountInfo(tokenIndex, recipientAccountInfo)
+	newSenderBalance := new(big.Int).Sub(oldSenderBalance, amount)
+	oldRecipientBalance := recipientBalances[tokenIndex]
+	newRecipientBalance := new(big.Int).Add(oldRecipientBalance, amount)
+
+	senderBalances[tokenIndex] = newSenderBalance
+	senderTransferNonces[tokenIndex] = newTransferNonce
+	recipientBalances[tokenIndex] = newRecipientBalance
 	updatedSender := &types.AccountInfo{
-		Account:  sender,
-		Balances: senderBalances,
-		Nonces:   senderNonces,
+		Account:        sender,
+		Balances:       senderBalances,
+		TransferNonces: senderTransferNonces,
+		WithdrawNonces: senderAccountInfo.WithdrawNonces,
 	}
 	updatedRecipient := &types.AccountInfo{
-		Account:  recipient,
-		Balances: recipientBalances,
-		Nonces:   recipientNonces,
+		Account:        recipient,
+		Balances:       recipientBalances,
+		TransferNonces: recipientTransferNonces,
+		WithdrawNonces: recipientWithdrawNonces,
 	}
 	err = sm.setAccountInfo(sender, updatedSender)
 	if err != nil {
@@ -269,13 +301,13 @@ func (sm *StateMachine) applyTransfer(tx *types.TransferTransaction) ([]*types.A
 	}
 
 	return []*types.AccountInfoUpdate{
-		&types.AccountInfoUpdate{
+		{
 			Info:       updatedSender,
 			NewAccount: false,
 		},
-		&types.AccountInfoUpdate{
+		{
 			Info:       updatedRecipient,
-			NewAccount: false,
+			NewAccount: newRecipient,
 		},
 	}, nil
 }
@@ -285,14 +317,19 @@ func (sm *StateMachine) createAccount(address common.Address, numTokens uint64) 
 	for i := 0; i < len(balances); i++ {
 		balances[i] = big.NewInt(0)
 	}
-	nonces := make([]*big.Int, numTokens)
-	for i := 0; i < len(nonces); i++ {
-		nonces[i] = big.NewInt(0)
+	transferNonces := make([]*big.Int, numTokens)
+	for i := 0; i < len(transferNonces); i++ {
+		transferNonces[i] = big.NewInt(0)
+	}
+	withdrawNonces := make([]*big.Int, numTokens)
+	for i := 0; i < len(withdrawNonces); i++ {
+		withdrawNonces[i] = big.NewInt(0)
 	}
 	accountInfo := &types.AccountInfo{
-		Account:  address,
-		Balances: balances,
-		Nonces:   nonces,
+		Account:        address,
+		Balances:       balances,
+		TransferNonces: transferNonces,
+		WithdrawNonces: withdrawNonces,
 	}
 	lastKeyBytes, exists, err := sm.db.Get(rollupdb.NamespaceLastKey, rollupdb.EmptyKey)
 	if err != nil {
@@ -304,13 +341,13 @@ func (sm *StateMachine) createAccount(address common.Address, numTokens uint64) 
 	} else {
 		lastKey = new(big.Int).SetBytes(lastKeyBytes)
 	}
-	newKey := lastKey.Add(lastKey, big.NewInt(1))
+	newKey := new(big.Int).Add(lastKey, big.NewInt(1))
 	newKeyBytes := newKey.Bytes()
 	data, err := accountInfo.Serialize(sm.serializer)
 	// log.Log().Int("data length", len(data)).Send()
 	// log.Log().Bytes("data", data).Err(err).Msg("createAccount")
 	tx := sm.db.NewTx()
-	err = tx.Set(rollupdb.NamespaceLastKey, rollupdb.EmptyKey, lastKey.Bytes())
+	err = tx.Set(rollupdb.NamespaceLastKey, rollupdb.EmptyKey, newKey.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -422,16 +459,20 @@ func (sm *StateMachine) GetStateRoot() []byte {
 	return sm.smt.Root()
 }
 
-func maybeExpandBalancesNonces(tokenIndex uint64, accountInfo *types.AccountInfo) ([]*big.Int, []*big.Int) {
+func maybeExpandAccountInfo(
+	tokenIndex uint64,
+	accountInfo *types.AccountInfo) ([]*big.Int, []*big.Int, []*big.Int) {
 	balances := accountInfo.Balances
-	nonces := accountInfo.Nonces
+	transferNonces := accountInfo.TransferNonces
+	withdrawNonces := accountInfo.WithdrawNonces
 	tokenIndexInt := int(tokenIndex)
 	oldLength := len(accountInfo.Balances)
 	if tokenIndexInt > oldLength-1 {
 		for i := oldLength - 1; i < tokenIndexInt; i++ {
 			balances = append(balances, big.NewInt(0))
-			nonces = append(nonces, big.NewInt(0))
+			transferNonces = append(transferNonces, big.NewInt(0))
+			withdrawNonces = append(withdrawNonces, big.NewInt(0))
 		}
 	}
-	return balances, nonces
+	return balances, transferNonces, withdrawNonces
 }

@@ -1,6 +1,11 @@
 package types
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
+)
 
 type RollupBlock struct {
 	BlockNumber uint64
@@ -28,22 +33,33 @@ func DeserializeRollupBlockFromStorage(data []byte) (*RollupBlock, error) {
 	return &block, nil
 }
 
-func (block *RollupBlock) SerializeTransactions(s *Serializer) ([][]byte, error) {
+func (block *RollupBlock) SerializeForSubmission(s *Serializer) ([][]byte, []byte, error) {
 	transitions := block.Transitions
 	serializedTransitions := make([][]byte, len(transitions))
 	for i, transition := range block.Transitions {
 		serializedTransition, err := transition.Serialize(s)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		serializedTransitions[i] = serializedTransition
 	}
-	return serializedTransitions, nil
+	rollupBlockArguments := abi.Arguments([]abi.Argument{
+		{Name: "blockNumber", Type: s.typeRegistry.uint256Ty, Indexed: false},
+		{Name: "transitions", Type: s.typeRegistry.bytesSliceTy, Indexed: false},
+	})
+	serializedBlock, err := rollupBlockArguments.Pack(
+		new(big.Int).SetUint64(block.BlockNumber),
+		serializedTransitions)
+	if err != nil {
+		return nil, nil, err
+	}
+	return serializedTransitions, serializedBlock, nil
 }
 
-func (s *Serializer) DeserializeRollupBlock(block [][]byte, blockNumber uint64) (*RollupBlock, error) {
-	transitions := make([]Transition, len(block))
-	for i, transitionData := range block {
+func (s *Serializer) DeserializeRollupBlock(
+	blockNumber uint64, rawTransitions [][]byte) (*RollupBlock, error) {
+	transitions := make([]Transition, len(rawTransitions))
+	for i, transitionData := range rawTransitions {
 		transition, err := s.DeserializeTransition(transitionData)
 		if err != nil {
 			return nil, err

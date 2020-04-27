@@ -16,26 +16,38 @@ const (
 
 type Transaction interface {
 	GetTransactionType() TransactionType
+	GetSignature() []byte
 }
 
 type DepositTransaction struct {
-	Account common.Address
-	Token   common.Address
-	Amount  *big.Int
+	Account   common.Address
+	Token     common.Address
+	Amount    *big.Int
+	Signature []byte
 }
 
 func (*DepositTransaction) GetTransactionType() TransactionType {
 	return TransactionTypeDeposit
 }
 
+func (t *DepositTransaction) GetSignature() []byte {
+	return t.Signature
+}
+
 type WithdrawTransaction struct {
-	Account common.Address
-	Token   common.Address
-	Amount  *big.Int
+	Account   common.Address
+	Token     common.Address
+	Amount    *big.Int
+	Nonce     *big.Int
+	Signature []byte
 }
 
 func (*WithdrawTransaction) GetTransactionType() TransactionType {
 	return TransactionTypeWithdraw
+}
+
+func (t *WithdrawTransaction) GetSignature() []byte {
+	return t.Signature
 }
 
 type TransferTransaction struct {
@@ -44,13 +56,13 @@ type TransferTransaction struct {
 	Token     common.Address
 	Amount    *big.Int
 	Nonce     *big.Int
+	Signature []byte
 }
 
 func (*TransferTransaction) GetTransactionType() TransactionType {
 	return TransactionTypeTransfer
 }
 
-type SignedTransaction struct {
-	Signature   []byte
-	Transaction Transaction
+func (t *TransferTransaction) GetSignature() []byte {
+	return t.Signature
 }

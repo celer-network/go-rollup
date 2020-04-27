@@ -17,13 +17,13 @@ const (
 )
 
 type TransactionGenerator struct {
-	aggregatorDb        db.DB
-	validatorDb         db.DB
-	sidechainClient     *ethclient.Client
-	rollupChain         *rollup.RollupChain
-	rollupTokenRegistry *rollup.RollupTokenRegistry
-	tokenMapper         *sidechain.TokenMapper
-	txQueue             chan *types.SignedTransaction
+	aggregatorDb    db.DB
+	validatorDb     db.DB
+	sidechainClient *ethclient.Client
+	rollupChain     *rollup.RollupChain
+	tokenRegistry   *rollup.TokenRegistry
+	tokenMapper     *sidechain.TokenMapper
+	txQueue         chan types.Transaction
 }
 
 func NewTransactionGenerator(
@@ -37,9 +37,9 @@ func NewTransactionGenerator(
 		log.Fatal().Msg(err.Error())
 	}
 
-	rollupTokenRegistryAddress := viper.GetString("rollupTokenRegistry")
-	log.Printf("rollupTokenRegistryAddress %s", rollupTokenRegistryAddress)
-	rollupTokenRegistry, err := rollup.NewRollupTokenRegistry(common.HexToAddress(rollupTokenRegistryAddress), mainchainClient)
+	tokenRegistryAddress := viper.GetString("tokenRegistry")
+	log.Printf("tokenRegistryAddress %s", tokenRegistryAddress)
+	tokenRegistry, err := rollup.NewTokenRegistry(common.HexToAddress(tokenRegistryAddress), mainchainClient)
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
@@ -51,18 +51,18 @@ func NewTransactionGenerator(
 	}
 
 	return &TransactionGenerator{
-		aggregatorDb:        aggregatorDb,
-		validatorDb:         validatorDb,
-		sidechainClient:     sidechainClient,
-		rollupChain:         rollupChain,
-		rollupTokenRegistry: rollupTokenRegistry,
-		tokenMapper:         tokenMapper,
-		txQueue:             make(chan *types.SignedTransaction, txQueueSize),
+		aggregatorDb:    aggregatorDb,
+		validatorDb:     validatorDb,
+		sidechainClient: sidechainClient,
+		rollupChain:     rollupChain,
+		tokenRegistry:   tokenRegistry,
+		tokenMapper:     tokenMapper,
+		txQueue:         make(chan types.Transaction, txQueueSize),
 	}
 }
 
 func (tg *TransactionGenerator) Start() {
-	go tg.watchRollupTokenRegistry()
+	go tg.watchTokenRegistry()
 	go tg.watchTokenMapper()
 	go tg.watchTransition()
 }
@@ -79,10 +79,10 @@ func (tg *TransactionGenerator) watchTransition() {
 	}
 }
 
-func (tg *TransactionGenerator) watchRollupTokenRegistry() error {
-	log.Print("Watching RollupTokenRegistry")
-	channel := make(chan *rollup.RollupTokenRegistryTokenRegistered)
-	sub, err := tg.rollupTokenRegistry.WatchTokenRegistered(&bind.WatchOpts{}, channel, nil, nil)
+func (tg *TransactionGenerator) watchTokenRegistry() error {
+	log.Print("Watching TokenRegistry")
+	channel := make(chan *rollup.TokenRegistryTokenRegistered)
+	sub, err := tg.tokenRegistry.WatchTokenRegistered(&bind.WatchOpts{}, channel, nil, nil)
 	if err != nil {
 		log.Err(err).Send()
 		return err
@@ -187,38 +187,30 @@ func (tg *TransactionGenerator) watchToken(contract *sidechain.SidechainERC20) e
 		select {
 		case event := <-transferChannel:
 			log.Print("Caught transfer")
-			tx := &types.TransferTransaction{
+			tg.txQueue <- &types.TransferTransaction{
 				Sender:    event.Sender,
 				Recipient: event.Recipient,
 				Token:     event.MainchainToken,
 				Amount:    event.Amount,
 				Nonce:     event.Nonce,
-			}
-			tg.txQueue <- &types.SignedTransaction{
-				Signature:   event.Signature,
-				Transaction: tx,
+				Signature: event.Signature,
 			}
 		case event := <-depositChannel:
 			log.Print("Caught deposit")
-			tx := &types.DepositTransaction{
-				Account: event.Account,
-				Token:   event.MainchainToken,
-				Amount:  event.Amount,
-			}
-			tg.txQueue <- &types.SignedTransaction{
-				Signature:   event.Signature,
-				Transaction: tx,
+			tg.txQueue <- &types.DepositTransaction{
+				Account:   event.Account,
+				Token:     event.MainchainToken,
+				Amount:    event.Amount,
+				Signature: event.Signature,
 			}
 		case event := <-withdrawChannel:
 			log.Print("Caught withdraw")
-			tx := &types.WithdrawTransaction{
-				Account: event.Account,
-				Token:   event.MainchainToken,
-				Amount:  event.Amount,
-			}
-			tg.txQueue <- &types.SignedTransaction{
-				Signature:   event.Signature,
-				Transaction: tx,
+			tg.txQueue <- &types.WithdrawTransaction{
+				Account:   event.Account,
+				Token:     event.MainchainToken,
+				Amount:    event.Amount,
+				Nonce:     event.Nonce,
+				Signature: event.Signature,
 			}
 		case err := <-transferSub.Err():
 			return err

@@ -47,8 +47,7 @@ func GetAuthFromKeystore(path string, password string) (*bind.TransactOpts, erro
 	return bind.NewKeyedTransactor(privateKey), nil
 }
 
-func SignData(privateKey *ecdsa.PrivateKey, types []string, data []interface{}) ([]byte, error) {
-	hash := solsha3.SoliditySHA3(types, data)
+func SignHash(privateKey *ecdsa.PrivateKey, hash []byte) ([]byte, error) {
 	prefixedHash := solsha3.SoliditySHA3WithPrefix(hash)
 	log.Debug().Str("prefixedHash", common.Bytes2Hex(prefixedHash)).Send()
 	sig, err := crypto.Sign(prefixedHash, privateKey)
@@ -58,6 +57,16 @@ func SignData(privateKey *ecdsa.PrivateKey, types []string, data []interface{}) 
 	// Use 27/28 for v
 	sig[64] = sig[64] + 27
 	return sig, nil
+}
+
+func SignData(privateKey *ecdsa.PrivateKey, data []byte) ([]byte, error) {
+	return SignHash(privateKey, crypto.Keccak256(data))
+}
+
+func SignPackedData(privateKey *ecdsa.PrivateKey, types []string, data []interface{}) ([]byte, error) {
+	// SoliditySHA3 is equivalent to abi.encodePacked
+	// TODO: Maybe always use abi.encode in the contracts
+	return SignHash(privateKey, solsha3.SoliditySHA3(types, data))
 }
 
 func generatePrefixedHash(data []byte) []byte {

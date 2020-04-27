@@ -10,16 +10,18 @@ import (
 )
 
 type AccountInfo struct {
-	Account  common.Address
-	Balances []*big.Int
-	Nonces   []*big.Int
+	Account        common.Address
+	Balances       []*big.Int
+	TransferNonces []*big.Int
+	WithdrawNonces []*big.Int
 }
 
 func createAccountInfoArguments(r *typeRegistry) abi.Arguments {
 	return abi.Arguments([]abi.Argument{
 		{Name: "account", Type: r.addressTy, Indexed: false},
 		{Name: "balances", Type: r.uint256SliceTy, Indexed: false},
-		{Name: "nonces", Type: r.uint256SliceTy, Indexed: false},
+		{Name: "transferNonces", Type: r.uint256SliceTy, Indexed: false},
+		{Name: "withdrawNonces", Type: r.uint256SliceTy, Indexed: false},
 	})
 }
 
@@ -27,7 +29,8 @@ func createAccountInfoArgumentMarshaling() []abi.ArgumentMarshaling {
 	return []abi.ArgumentMarshaling{
 		{Name: "account", Type: "address"},
 		{Name: "balances", Type: "uint256[]"},
-		{Name: "nonces", Type: "uint256[]"},
+		{Name: "transferNonces", Type: "uint256[]"},
+		{Name: "withdrawNonces", Type: "uint256[]"},
 	}
 }
 
@@ -39,7 +42,8 @@ func (info *AccountInfo) Serialize(s *Serializer) ([]byte, error) {
 	data, err := s.accountInfoArguments.Pack(
 		info.Account,
 		info.Balances,
-		info.Nonces,
+		info.TransferNonces,
+		info.WithdrawNonces,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("Serialize AccountInfo %v: %w", info, err)

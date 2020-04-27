@@ -67,12 +67,12 @@ func RunTokenMapper(
 }
 
 func RegisterToken(ctx context.Context, conn *ethclient.Client, auth *bind.TransactOpts, tokenAddress common.Address) {
-	rollupTokenRegistryAddress := common.HexToAddress(viper.GetString("rollupTokenRegistry"))
-	rollupTokenRegistry, err := rollup.NewRollupTokenRegistry(rollupTokenRegistryAddress, conn)
+	tokenRegistryAddress := common.HexToAddress(viper.GetString("tokenRegistry"))
+	tokenRegistry, err := rollup.NewTokenRegistry(tokenRegistryAddress, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	tx, err := rollupTokenRegistry.RegisterToken(auth, tokenAddress)
+	tx, err := tokenRegistry.RegisterToken(auth, tokenAddress)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -123,23 +123,23 @@ func DepositAndTransfer(
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	tx, err := sidechainErc20.Deposit(mapperAuth, auth1.From, big.NewInt(1), nil)
+	amount := big.NewInt(1)
+	tx, err := sidechainErc20.Deposit(mapperAuth, auth1.From, amount, nil)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
 	waitMined(ctx, conn, tx)
-	tx, err = sidechainErc20.Deposit(mapperAuth, auth2.From, big.NewInt(1), nil)
+	tx, err = sidechainErc20.Deposit(mapperAuth, auth2.From, amount, nil)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
 	waitMined(ctx, conn, tx)
 
-	amount := big.NewInt(1)
-	nonce, err := sidechainErc20.Nonces(&bind.CallOpts{}, auth1.From)
+	nonce, err := sidechainErc20.TransferNonces(&bind.CallOpts{}, auth1.From)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	signature, err := utils.SignData(
+	signature, err := utils.SignPackedData(
 		auth1PrivateKey,
 		[]string{"address", "address", "address", "uint256", "uint256"},
 		[]interface{}{

@@ -2,8 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
-	"errors"
 	"flag"
 	"io/ioutil"
 	"math/big"
@@ -13,7 +11,6 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/celer-network/go-rollup/types"
-	"github.com/celer-network/go-rollup/utils"
 	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -49,22 +46,22 @@ func NewFraudster(
 }
 
 func (f *Fraudster) submitFraudBlock(pendingBlock *types.RollupBlock) error {
-	serializedBlock, err := pendingBlock.SerializeTransactions(f.serializer)
-	if err != nil {
-		return err
-	}
-	log.Print("Submitting fraud block ", pendingBlock.BlockNumber)
-	tx, err := f.rollupChain.SubmitBlock(f.mainchainAuth, serializedBlock)
-	if err != nil {
-		return err
-	}
-	receipt, err := utils.WaitMined(context.Background(), f.mainchainClient, tx, 0)
-	if err != nil {
-		return err
-	}
-	if receipt.Status != 1 {
-		return errors.New("Failed to submit block")
-	}
+	// serializedBlock, err := pendingBlock.SerializeTransactions(f.serializer)
+	// if err != nil {
+	// 	return err
+	// }
+	// log.Print("Submitting fraud block ", pendingBlock.BlockNumber)
+	// tx, err := f.rollupChain.CommitBlock(f.mainchainAuth, serializedBlock)
+	// if err != nil {
+	// 	return err
+	// }
+	// receipt, err := utils.WaitMined(context.Background(), f.mainchainClient, tx, 0)
+	// if err != nil {
+	// 	return err
+	// }
+	// if receipt.Status != 1 {
+	// 	return errors.New("Failed to submit block")
+	// }
 	return nil
 }
 

@@ -33,7 +33,7 @@ func TestSubmitBlock(t *testing.T) {
 	DeploySidechainContracts()
 	SetupConfig()
 
-	aggregator, err := aggregator.NewAggregator(aggregator1DbDir, validator1DbDir, aggregator1Keystore, aggregator1Keystore, false)
+	aggregator, err := aggregator.NewAggregator(aggregator1DbDir, validator1DbDir, node1Keystore, node1Keystore, false)
 	if err != nil {
 		t.Fatal(err)
 	}
