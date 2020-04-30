@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/celer-network/go-rollup/types"
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -28,14 +28,14 @@ type Fraudster struct {
 	mainchainClient *ethclient.Client
 	mainchainAuth   *bind.TransactOpts
 	serializer      *types.Serializer
-	rollupChain     *rollup.RollupChain
+	rollupChain     *mainchain.RollupChain
 }
 
 func NewFraudster(
 	mainchainClient *ethclient.Client,
 	mainchainAuth *bind.TransactOpts,
 	serializer *types.Serializer,
-	rollupChain *rollup.RollupChain,
+	rollupChain *mainchain.RollupChain,
 ) *Fraudster {
 	return &Fraudster{
 		mainchainClient: mainchainClient,
@@ -46,7 +46,7 @@ func NewFraudster(
 }
 
 func (f *Fraudster) submitFraudBlock(pendingBlock *types.RollupBlock) error {
-	// serializedBlock, err := pendingBlock.SerializeTransactions(f.serializer)
+	// serializedBlock, err := pendingBlock.SerializeForSubmission(f.serializer)
 	// if err != nil {
 	// 	return err
 	// }
@@ -89,7 +89,7 @@ func main() {
 	}
 
 	rollupChainAddress := viper.GetString("rollupChain")
-	rollupChain, err := rollup.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
+	rollupChain, err := mainchain.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}

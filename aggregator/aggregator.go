@@ -20,7 +20,8 @@ import (
 	"github.com/celer-network/go-rollup/db/badgerdb"
 	"github.com/celer-network/go-rollup/statemachine"
 	"github.com/celer-network/go-rollup/types"
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
+	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 	"github.com/spf13/viper"
 )
 
@@ -98,7 +99,23 @@ func NewAggregator(
 
 	rollupChainAddress := viper.GetString("rollupChain")
 	rollupChain, err :=
-		rollup.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
+		mainchain.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+		return nil, err
+	}
+
+	validatorRegistryAddress := viper.GetString("validatorRegistry")
+	validatorRegistry, err :=
+		mainchain.NewValidatorRegistry(common.HexToAddress(validatorRegistryAddress), mainchainClient)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+		return nil, err
+	}
+
+	blockCommitteeAddress := viper.GetString("blockCommittee")
+	blockCommittee, err :=
+		sidechain.NewBlockCommittee(common.HexToAddress(blockCommitteeAddress), sidechainClient)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 		return nil, err
@@ -117,8 +134,14 @@ func NewAggregator(
 			mainchainClient,
 			mainchainAuth,
 			mainchainKey.PrivateKey,
+			sidechainClient,
+			sidechainAuth,
+			sidechainKey.PrivateKey,
 			serializer,
-			rollupChain)
+			rollupChain,
+			validatorRegistry,
+			blockCommittee,
+		)
 
 	validatorStateMachine, err := statemachine.NewStateMachine(validatorDb, serializer)
 	validator := validator.NewValidator(
@@ -155,6 +178,7 @@ func NewAggregator(
 func (a *Aggregator) Start() {
 	go a.processTransactions()
 	go a.validator.Start()
+	go a.blockSubmitter.Start()
 	a.txGenerator.Start()
 }
 
@@ -180,10 +204,10 @@ func (a *Aggregator) applyTransaction(tx types.Transaction) (*types.SignedStateR
 		Int("numPendingTxn", len(a.pendingBlock.Transitions)).
 		Int("numTxnInBlock", a.numTransitionsInBlock).Send()
 	if len(a.pendingBlock.Transitions) >= a.numTransitionsInBlock {
-		submitErr := a.blockSubmitter.submitBlock(a.pendingBlock)
-		if submitErr != nil {
-			log.Err(submitErr).Msg("Submit error")
-			return nil, submitErr
+		_, proposeErr := a.blockSubmitter.proposeBlock(a.pendingBlock)
+		if proposeErr != nil {
+			log.Err(proposeErr).Msg("Propose error")
+			return nil, proposeErr
 		}
 		a.pendingBlock = types.NewRollupBlock(a.pendingBlock.BlockNumber + 1)
 	}

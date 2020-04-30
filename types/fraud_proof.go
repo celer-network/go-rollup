@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 )
 
@@ -95,9 +95,9 @@ func createIncludedTransitionType(r *typeRegistry) (abi.Type, error) {
 }
 
 type ContractFraudProof struct {
-	PreStateIncludedTransition rollup.DataTypesIncludedTransition
-	InvalidIncludedTransition  rollup.DataTypesIncludedTransition
-	TransitionStorageSlots     []rollup.DataTypesIncludedStorageSlot
+	PreStateIncludedTransition mainchain.DataTypesIncludedTransition
+	InvalidIncludedTransition  mainchain.DataTypesIncludedTransition
+	TransitionStorageSlots     []mainchain.DataTypesIncludedStorageSlot
 }
 
 func ConvertToInclusionProof(data [][]byte) InclusionProof {

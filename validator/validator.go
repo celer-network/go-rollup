@@ -12,7 +12,7 @@ import (
 	"github.com/celer-network/go-rollup/statemachine"
 	"github.com/celer-network/go-rollup/types"
 	"github.com/celer-network/go-rollup/utils"
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -24,7 +24,7 @@ type Validator struct {
 	stateMachine    *statemachine.StateMachine
 	mainchainClient *ethclient.Client
 	mainchainAuth   *bind.TransactOpts
-	rollupChain     *rollup.RollupChain
+	rollupChain     *mainchain.RollupChain
 }
 
 func NewValidator(
@@ -33,7 +33,7 @@ func NewValidator(
 	stateMachine *statemachine.StateMachine,
 	mainchainClient *ethclient.Client,
 	mainchainAuth *bind.TransactOpts,
-	rollupChain *rollup.RollupChain,
+	rollupChain *mainchain.RollupChain,
 ) *Validator {
 	return &Validator{
 		db:              db,
@@ -50,7 +50,7 @@ func (v *Validator) Start() {
 }
 
 func (v *Validator) watchRollupBlockCommitted() error {
-	channel := make(chan *rollup.RollupChainRollupBlockCommitted)
+	channel := make(chan *mainchain.RollupChainRollupBlockCommitted)
 	sub, err := v.rollupChain.WatchRollupBlockCommitted(&bind.WatchOpts{}, channel)
 	if err != nil {
 		return err
@@ -274,19 +274,19 @@ func (v *Validator) getTransactionFromTransitionAndSnapshots(
 
 func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFraudProof *types.LocalFraudProof) (*types.ContractFraudProof, error) {
 	fraudInputs := localFraudProof.Inputs
-	transitionStorageSlots := make([]rollup.DataTypesIncludedStorageSlot, len(fraudInputs))
+	transitionStorageSlots := make([]mainchain.DataTypesIncludedStorageSlot, len(fraudInputs))
 	for i, input := range fraudInputs {
 		inputAccountInfo := input.AccountInfo
-		storageSlot := rollup.DataTypesStorageSlot{
+		storageSlot := mainchain.DataTypesStorageSlot{
 			SlotIndex: input.SlotIndex,
-			Value: rollup.DataTypesAccountInfo{
+			Value: mainchain.DataTypesAccountInfo{
 				Account:        inputAccountInfo.Account,
 				Balances:       inputAccountInfo.Balances,
 				TransferNonces: inputAccountInfo.TransferNonces,
 				WithdrawNonces: inputAccountInfo.WithdrawNonces,
 			},
 		}
-		transitionStorageSlots[i] = rollup.DataTypesIncludedStorageSlot{
+		transitionStorageSlots[i] = mainchain.DataTypesIncludedStorageSlot{
 			StorageSlot: storageSlot,
 			Siblings:    input.InclusionProof,
 		}
@@ -304,7 +304,7 @@ func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFr
 	if err != nil {
 		return nil, err
 	}
-	var preStateIncludedTransition *rollup.DataTypesIncludedTransition
+	var preStateIncludedTransition *mainchain.DataTypesIncludedTransition
 	if localFraudProof.Position.TransitionIndex == 0 {
 		// Fetch previous block
 		previousBlockNumber := big.NewInt((int64(blockNumber - 1)))
@@ -351,7 +351,7 @@ func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) er
 		return nil
 	}
 	// transitionEvaluatorAddress := common.HexToAddress(viper.GetString("transitionEvaluator"))
-	// transitionEvaluator, err := rollup.NewTransitionEvaluator(transitionEvaluatorAddress, v.mainchainClient)
+	// transitionEvaluator, err := mainchain.NewTransitionEvaluator(transitionEvaluatorAddress, v.mainchainClient)
 	// log.Debug().Str("invalidIncludedTransition", common.Bytes2Hex(proof.InvalidIncludedTransition.Transition)).Send()
 	// stateRoot, slots, err := transitionEvaluator.GetTransitionStateRootAndAccessList(&bind.CallOpts{}, proof.InvalidIncludedTransition.Transition)
 	// if err != nil {
@@ -364,7 +364,7 @@ func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) er
 	// 	proof.PreStateIncludedTransition.Transition,
 	// 	proof.InvalidIncludedTransition.Transition,
 	// )
-	// storageSlots := make([]rollup.DataTypesStorageSlot, len(proof.TransitionStorageSlots))
+	// storageSlots := make([]mainchain.DataTypesStorageSlot, len(proof.TransitionStorageSlots))
 	// for i, includedSlot := range proof.TransitionStorageSlots {
 	// 	storageSlots[i] = includedSlot.StorageSlot
 	// 	log.Debug().Int("index", i).Uint64("balance0", storageSlots[i].Value.Balances[0].Uint64()).Send()

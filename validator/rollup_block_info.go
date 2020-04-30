@@ -8,7 +8,7 @@ import (
 	"github.com/celer-network/go-rollup/db/memorydb"
 	"github.com/celer-network/go-rollup/smt"
 	"github.com/celer-network/go-rollup/types"
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -48,24 +48,24 @@ func (info *RollupBlockInfo) GetNumTransitions() int {
 	return len(info.encodedTransitions)
 }
 
-func (info *RollupBlockInfo) GetIncludedTransition(transitionIndex int) (*rollup.DataTypesIncludedTransition, error) {
+func (info *RollupBlockInfo) GetIncludedTransition(transitionIndex int) (*mainchain.DataTypesIncludedTransition, error) {
 	inclusionProof, err := info.GetTransitionInclusionProof(transitionIndex)
 	if err != nil {
 		return nil, err
 	}
-	return &rollup.DataTypesIncludedTransition{
+	return &mainchain.DataTypesIncludedTransition{
 		Transition:     info.encodedTransitions[transitionIndex],
 		InclusionProof: *inclusionProof,
 	}, nil
 }
 
-func (info *RollupBlockInfo) GetTransitionInclusionProof(transitionIndex int) (*rollup.DataTypesTransitionInclusionProof, error) {
+func (info *RollupBlockInfo) GetTransitionInclusionProof(transitionIndex int) (*mainchain.DataTypesTransitionInclusionProof, error) {
 	transitionIndexInt := big.NewInt(int64(transitionIndex))
 	proofData, err := info.smt.Prove(transitionIndexInt.Bytes())
 	if err != nil {
 		return nil, err
 	}
-	return &rollup.DataTypesTransitionInclusionProof{
+	return &mainchain.DataTypesTransitionInclusionProof{
 		BlockNumber:     info.blockNumber,
 		TransitionIndex: transitionIndexInt,
 		Siblings:        types.ConvertToInclusionProof(proofData),

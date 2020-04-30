@@ -8,7 +8,7 @@ import (
 
 	"github.com/celer-network/go-rollup/utils"
 
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -21,7 +21,7 @@ type Bridge struct {
 	sidechainClient         *ethclient.Client
 	sidechainAuth           *bind.TransactOpts
 	sidechainAuthPrivateKey *ecdsa.PrivateKey
-	depositWithdrawManager  *rollup.DepositWithdrawManager
+	depositWithdrawManager  *mainchain.DepositWithdrawManager
 	tokenMapper             *sidechain.TokenMapper
 }
 
@@ -32,7 +32,7 @@ func NewBridge(
 	sidechainAuthPrivateKey *ecdsa.PrivateKey,
 ) (*Bridge, error) {
 	depositWithdrawManagerAddress := common.HexToAddress(viper.GetString("deposit_withdraw_manager"))
-	depositWithdrawManager, err := rollup.NewDepositWithdrawManager(depositWithdrawManagerAddress, mainchainClient)
+	depositWithdrawManager, err := mainchain.NewDepositWithdrawManager(depositWithdrawManagerAddress, mainchainClient)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (b *Bridge) relayDeposit(
 }
 
 func (b *Bridge) watchMainchainDeposit() {
-	depositChannel := make(chan *rollup.DepositWithdrawManagerTokenDeposited)
+	depositChannel := make(chan *mainchain.DepositWithdrawManagerTokenDeposited)
 	b.depositWithdrawManager.WatchTokenDeposited(&bind.WatchOpts{}, depositChannel)
 	for {
 		select {

@@ -3,7 +3,7 @@ package aggregator
 import (
 	"github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/types"
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -20,8 +20,8 @@ type TransactionGenerator struct {
 	aggregatorDb    db.DB
 	validatorDb     db.DB
 	sidechainClient *ethclient.Client
-	rollupChain     *rollup.RollupChain
-	tokenRegistry   *rollup.TokenRegistry
+	rollupChain     *mainchain.RollupChain
+	tokenRegistry   *mainchain.TokenRegistry
 	tokenMapper     *sidechain.TokenMapper
 	txQueue         chan types.Transaction
 }
@@ -30,7 +30,7 @@ func NewTransactionGenerator(
 	aggregatorDb db.DB,
 	validatorDb db.DB,
 	mainchainClient *ethclient.Client,
-	rollupChain *rollup.RollupChain,
+	rollupChain *mainchain.RollupChain,
 ) *TransactionGenerator {
 	sidechainClient, err := ethclient.Dial(viper.GetString("sideChainEndpoint"))
 	if err != nil {
@@ -39,7 +39,7 @@ func NewTransactionGenerator(
 
 	tokenRegistryAddress := viper.GetString("tokenRegistry")
 	log.Printf("tokenRegistryAddress %s", tokenRegistryAddress)
-	tokenRegistry, err := rollup.NewTokenRegistry(common.HexToAddress(tokenRegistryAddress), mainchainClient)
+	tokenRegistry, err := mainchain.NewTokenRegistry(common.HexToAddress(tokenRegistryAddress), mainchainClient)
 	if err != nil {
 		log.Fatal().Msg(err.Error())
 	}
@@ -69,7 +69,7 @@ func (tg *TransactionGenerator) Start() {
 
 func (tg *TransactionGenerator) watchTransition() {
 	log.Print("Watch Transition")
-	channel := make(chan *rollup.RollupChainTransition)
+	channel := make(chan *mainchain.RollupChainTransition)
 	tg.rollupChain.WatchTransition(&bind.WatchOpts{}, channel)
 	for {
 		select {
@@ -81,7 +81,7 @@ func (tg *TransactionGenerator) watchTransition() {
 
 func (tg *TransactionGenerator) watchTokenRegistry() error {
 	log.Print("Watching TokenRegistry")
-	channel := make(chan *rollup.TokenRegistryTokenRegistered)
+	channel := make(chan *mainchain.TokenRegistryTokenRegistered)
 	sub, err := tg.tokenRegistry.WatchTokenRegistered(&bind.WatchOpts{}, channel, nil, nil)
 	if err != nil {
 		log.Err(err).Send()

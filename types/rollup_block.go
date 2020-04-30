@@ -33,29 +33,6 @@ func DeserializeRollupBlockFromStorage(data []byte) (*RollupBlock, error) {
 	return &block, nil
 }
 
-func (block *RollupBlock) SerializeForSubmission(s *Serializer) ([][]byte, []byte, error) {
-	transitions := block.Transitions
-	serializedTransitions := make([][]byte, len(transitions))
-	for i, transition := range block.Transitions {
-		serializedTransition, err := transition.Serialize(s)
-		if err != nil {
-			return nil, nil, err
-		}
-		serializedTransitions[i] = serializedTransition
-	}
-	rollupBlockArguments := abi.Arguments([]abi.Argument{
-		{Name: "blockNumber", Type: s.typeRegistry.uint256Ty, Indexed: false},
-		{Name: "transitions", Type: s.typeRegistry.bytesSliceTy, Indexed: false},
-	})
-	serializedBlock, err := rollupBlockArguments.Pack(
-		new(big.Int).SetUint64(block.BlockNumber),
-		serializedTransitions)
-	if err != nil {
-		return nil, nil, err
-	}
-	return serializedTransitions, serializedBlock, nil
-}
-
 func (s *Serializer) DeserializeRollupBlock(
 	blockNumber uint64, rawTransitions [][]byte) (*RollupBlock, error) {
 	transitions := make([]Transition, len(rawTransitions))
@@ -70,4 +47,35 @@ func (s *Serializer) DeserializeRollupBlock(
 		BlockNumber: blockNumber,
 		Transitions: transitions,
 	}, nil
+}
+
+func (block *RollupBlock) SerializeForSubmission(s *Serializer) ([][]byte, []byte, error) {
+	transitions := block.Transitions
+	serializedTransitions := make([][]byte, len(transitions))
+	for i, transition := range block.Transitions {
+		serializedTransition, err := transition.Serialize(s)
+		if err != nil {
+			return nil, nil, err
+		}
+		serializedTransitions[i] = serializedTransition
+	}
+	encodedBlock, err := EncodeBlock(s, new(big.Int).SetUint64(block.BlockNumber), serializedTransitions)
+	if err != nil {
+		return nil, nil, err
+	}
+	return serializedTransitions, encodedBlock, nil
+}
+
+func EncodeBlock(s *Serializer, blockNumber *big.Int, serializedTransitions [][]byte) ([]byte, error) {
+	rollupBlockArguments := abi.Arguments([]abi.Argument{
+		{Name: "blockNumber", Type: s.typeRegistry.uint256Ty, Indexed: false},
+		{Name: "transitions", Type: s.typeRegistry.bytesSliceTy, Indexed: false},
+	})
+	encodedBlock, err := rollupBlockArguments.Pack(
+		blockNumber,
+		serializedTransitions)
+	if err != nil {
+		return nil, err
+	}
+	return encodedBlock, nil
 }

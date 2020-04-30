@@ -5,7 +5,7 @@ import (
 	"crypto/ecdsa"
 	"math/big"
 
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 
@@ -68,7 +68,7 @@ func RunTokenMapper(
 
 func RegisterToken(ctx context.Context, conn *ethclient.Client, auth *bind.TransactOpts, tokenAddress common.Address) {
 	tokenRegistryAddress := common.HexToAddress(viper.GetString("tokenRegistry"))
-	tokenRegistry, err := rollup.NewTokenRegistry(tokenRegistryAddress, conn)
+	tokenRegistry, err := mainchain.NewTokenRegistry(tokenRegistryAddress, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}

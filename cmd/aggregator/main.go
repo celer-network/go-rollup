@@ -17,7 +17,7 @@ var (
 	aggregatorDbDir   = flag.String("aggregatordb", "/tmp/celer_rollup_test/aggregator1Db", "Aggregator DB directory")
 	validatorDbDir    = flag.String("validatordb", "/tmp/celer_rollup_test/validator1Db", "Validator DB directory")
 	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/node1.json", "Mainchain keystore file")
-	sidechainKeystore = flag.String("sidechainkeystore", "env/keystore/node2.json", "Sidechain keystore file")
+	sidechainKeystore = flag.String("sidechainkeystore", "env/keystore/node1.json", "Sidechain keystore file")
 	fraudTransfer     = flag.Bool("fraudtransfer", false, "Submit bad state root for transfers")
 )
 

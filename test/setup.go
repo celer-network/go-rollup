@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 
 	"github.com/celer-network/go-rollup/utils"
-	"github.com/celer-network/rollup-contracts/bindings/go/mainchain/rollup"
-	"gopkg.in/yaml.v2"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -272,7 +272,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	}
 	ctx := context.Background()
 
-	validatorRegistryAddress, tx, validatorRegistry, err := rollup.DeployValidatorRegistry(
+	validatorRegistryAddress, tx, validatorRegistry, err := mainchain.DeployValidatorRegistry(
 		etherbaseAuth,
 		conn,
 		[]common.Address{aggregatorAddress},
@@ -288,7 +288,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	log.Printf("Deployed ValidatorRegistry at 0x%x\n", validatorRegistryAddress)
 
 	log.Print("Deploying AccountRegistry...")
-	accountRegistryAddress, tx, _, err := rollup.DeployAccountRegistry(etherbaseAuth, conn)
+	accountRegistryAddress, tx, _, err := mainchain.DeployAccountRegistry(etherbaseAuth, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -300,7 +300,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	log.Printf("Deployed AccountRegistry at 0x%x\n", accountRegistryAddress)
 
 	log.Print("Deploying TokenRegistry...")
-	tokenRegistryAddress, tx, _, err := rollup.DeployTokenRegistry(etherbaseAuth, conn)
+	tokenRegistryAddress, tx, _, err := mainchain.DeployTokenRegistry(etherbaseAuth, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -312,7 +312,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	log.Printf("Deployed TokenRegistry at 0x%x\n", tokenRegistryAddress)
 
 	log.Print("Deploying MerkleUtils...")
-	merkleUtilsAddress, tx, _, err := rollup.DeployMerkleUtils(etherbaseAuth, conn)
+	merkleUtilsAddress, tx, _, err := mainchain.DeployMerkleUtils(etherbaseAuth, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -325,7 +325,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 
 	log.Print("Deploying TransitionEvaluator...")
 	transitionEvaluatorAddress, tx, _, err :=
-		rollup.DeployTransitionEvaluator(
+		mainchain.DeployTransitionEvaluator(
 			etherbaseAuth,
 			conn,
 			accountRegistryAddress,
@@ -342,7 +342,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 
 	log.Print("Deploying RollupChain...")
 	rollupChainAddress, tx, _, err :=
-		rollup.DeployRollupChain(
+		mainchain.DeployRollupChain(
 			etherbaseAuth,
 			conn,
 			transitionEvaluatorAddress,
@@ -363,7 +363,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 
 	log.Print("Deploying DepositWithdrawManager...")
 	depositWithdrawManagerAddress, tx, _, err :=
-		rollup.DeployDepositWithdrawManager(
+		mainchain.DeployDepositWithdrawManager(
 			etherbaseAuth,
 			conn,
 			rollupChainAddress,
