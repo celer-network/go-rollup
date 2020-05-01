@@ -19,5 +19,5 @@ func main() {
 	}
 
 	test.DeployMainchainContracts()
-	test.DeploySidechainContracts()
+	//test.DeploySidechainContracts()
 }

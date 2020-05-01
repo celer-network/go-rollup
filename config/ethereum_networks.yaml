@@ -1,2 +1,2 @@
-mainchainEndpoint: ws://127.0.0.1:8546
+mainchainEndpoint: wss://ropsten.infura.io/ws/v3/b64e62bc284840a491fa39dedf88b6af
 sidechainEndpoint: ws://127.0.0.1:8548

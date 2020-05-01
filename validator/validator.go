@@ -374,6 +374,7 @@ func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFr
 
 func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) error {
 	v.mainchainAuth.GasLimit = 8000000
+	v.mainchainAuth.GasPrice = big.NewInt(10e9) // 10 Gwei
 	committerAddress, err := v.rollupChain.CommitterAddress(&bind.CallOpts{})
 	if err != nil {
 		return err
@@ -429,5 +430,6 @@ func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) er
 		return errors.New("Failed to submit fraud proof")
 	}
 	log.Debug().Str("tx", tx.Hash().Hex()).Msg("Successfully submitted fraud proof")
+	log.Debug().Uint64("gasUsed", receipt.GasUsed).Send()
 	return nil
 }
