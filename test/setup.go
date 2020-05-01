@@ -49,11 +49,14 @@ type TestTokenInfo struct {
 }
 
 const (
-	testRootDir                  = "/tmp/celer_rollup_test"
+	testRootDir                  = "/tmp/celer-rollup-test"
 	envDir                       = "env"
 	mainchainEthEndpoint         = "ws://127.0.0.1:8546"
 	sidechainEthEndpoint         = "ws://127.0.0.1:8548"
-	aggregatorAddressStr         = "0x6a6d2a97da1c453a4e099e8054865a0a59728863"
+	node0AddressStr              = "0x6a6d2a97da1c453a4e099e8054865a0a59728863"
+	node1AddressStr              = "0x35303ea8008313ea84563ecf186940c33c1d668f"
+	node2AddressStr              = "0xbbccd25dc804ea3581883259b224db65036234ce"
+	node3AddressStr              = "0xc286de530407a55b236d9f29f3d9028f58047d36"
 	mainchainEtherbaseAddressStr = "0xb5bb8b7f6f1883e0c01ffb8697024532e6f3238c"
 	sidechainEtherbaseAddressStr = "0xba756d65a1a03f07d205749f35e2406e4a8522ad"
 	repo                         = "github.com/celer-network/go-rollup"
@@ -62,15 +65,20 @@ const (
 var (
 	mainchainEtherBaseAddress = common.HexToAddress(mainchainEtherbaseAddressStr)
 	sidechainEtherBaseAddress = common.HexToAddress(sidechainEtherbaseAddressStr)
-	aggregatorAddress         = common.HexToAddress(aggregatorAddressStr)
+	node0Address              = common.HexToAddress(node0AddressStr)
+	node1Address              = common.HexToAddress(node1AddressStr)
+	node2Address              = common.HexToAddress(node2AddressStr)
+	node3Address              = common.HexToAddress(node3AddressStr)
 
 	testConfigDir              = filepath.Join(testRootDir, "config")
 	mainchainDataDir           = filepath.Join(testRootDir, "mainchaindata")
 	sidechainDataDir           = filepath.Join(testRootDir, "sidechaindata")
-	aggregator1DbDir           = filepath.Join(testRootDir, "aggregator1Db")
-	validator1DbDir            = filepath.Join(testRootDir, "validator1Db")
-	aggregator2DbDir           = filepath.Join(testRootDir, "aggregator2Db")
-	validator2DbDir            = filepath.Join(testRootDir, "validator2Db")
+	node0AggregatorDbDir       = filepath.Join(testRootDir, "node0-aggregator-db")
+	node0ValidatorDbDir        = filepath.Join(testRootDir, "node0-validator-db")
+	node1AggregatorDbDir       = filepath.Join(testRootDir, "node1-aggregator-db")
+	node1ValidatorDbDir        = filepath.Join(testRootDir, "node1-validator-db")
+	node2AggregatorDbDir       = filepath.Join(testRootDir, "node2-aggregator-db")
+	node2ValidatorDbDir        = filepath.Join(testRootDir, "node2-validator-db")
 	emptyPasswordFile          = filepath.Join(envDir, "empty_password.txt")
 	mainchainGenesis           = filepath.Join(envDir, "mainchain_genesis.json")
 	sidechainGenesis           = filepath.Join(envDir, "sidechain_genesis.json")
@@ -78,9 +86,11 @@ var (
 	envConfigDir               = filepath.Join(envDir, "config")
 	mainchainEtherbaseKeystore = filepath.Join(keystoreDir, "mainchain_etherbase.json")
 	sidechainEtherbaseKeystore = filepath.Join(keystoreDir, "sidechain_etherbase.json")
+	node0Keystore              = filepath.Join(keystoreDir, "node0.json")
 	node1Keystore              = filepath.Join(keystoreDir, "node1.json")
-	account1Keystore           = filepath.Join(keystoreDir, "account1.json")
-	account2Keystore           = filepath.Join(keystoreDir, "account2.json")
+	node2Keystore              = filepath.Join(keystoreDir, "node2.json")
+	user0Keystore              = filepath.Join(keystoreDir, "user0.json")
+	user1Keysetore             = filepath.Join(keystoreDir, "user1.json")
 )
 
 // toBuild map package subpath to binary file name eg. aggregator/cmd -> aggregator means
@@ -275,7 +285,11 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	validatorRegistryAddress, tx, validatorRegistry, err := mainchain.DeployValidatorRegistry(
 		etherbaseAuth,
 		conn,
-		[]common.Address{aggregatorAddress},
+		[]common.Address{
+			node0Address,
+			node1Address,
+			node2Address,
+		},
 	)
 	if err != nil {
 		log.Fatal().Err(err).Send()
@@ -349,7 +363,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 			merkleUtilsAddress,
 			tokenRegistryAddress,
 			validatorRegistryAddress,
-			aggregatorAddress,
+			node0Address,
 		)
 	if err != nil {
 		log.Fatal().Err(err).Send()
@@ -416,7 +430,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	// Transfer ERC20 to aggregator
 	moonAmt := new(big.Int)
 	moonAmt.SetString("500000000000000000000000000000", 10)
-	addrs := []common.Address{aggregatorAddress}
+	addrs := []common.Address{node0Address}
 	for _, addr := range addrs {
 		tx, err = erc20.Transfer(etherbaseAuth, addr, moonAmt)
 		if err != nil {
@@ -466,7 +480,11 @@ func DeploySidechainContracts() *SidechainContractAddresses {
 	blockCommitteeAddress, tx, _, err := sidechain.DeployBlockCommittee(
 		etherbaseAuth,
 		conn,
-		[]common.Address{aggregatorAddress},
+		[]common.Address{
+			node0Address,
+			node1Address,
+			node2Address,
+		},
 	)
 	if err != nil {
 		log.Fatal().Err(err).Send()

@@ -236,7 +236,7 @@ func createCreateAndTransferTransitionArguments(r *typeRegistry) abi.Arguments {
 func (transition *CreateAndTransferTransition) Serialize(s *Serializer) ([]byte, error) {
 	var stateRoot [32]byte
 	copy(stateRoot[:], transition.StateRoot[:])
-	return s.transferTransitionArguments.Pack(
+	return s.createAndTransferTransitionArguments.Pack(
 		transition.TransitionType,
 		stateRoot,
 		transition.SenderSlotIndex,

@@ -36,6 +36,7 @@ type Aggregator struct {
 	bridge                *bridge.Bridge
 	numTransitionsInBlock int
 	fraudTransfer         bool
+	validatorMode         bool
 }
 
 func NewAggregator(
@@ -43,7 +44,8 @@ func NewAggregator(
 	validatorDbDir string,
 	mainchainKeystore string,
 	sidechainKeystore string,
-	fraudTransfer bool) (*Aggregator, error) {
+	fraudTransfer bool,
+	validatorMode bool) (*Aggregator, error) {
 	aggregatorDb, err := badgerdb.NewDB(aggregatorDbDir)
 	if err != nil {
 		return nil, err
@@ -63,37 +65,37 @@ func NewAggregator(
 
 	mainchainKeystoreBytes, err := ioutil.ReadFile(mainchainKeystore)
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 	mainchainKey, err := keystore.DecryptKey(mainchainKeystoreBytes, "")
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 	mainchainAuth := bind.NewKeyedTransactor(mainchainKey.PrivateKey)
 
 	sidechainKeystoreBytes, err := ioutil.ReadFile(sidechainKeystore)
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 	sidechainKey, err := keystore.DecryptKey(sidechainKeystoreBytes, "")
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 	sidechainAuth := bind.NewKeyedTransactor(sidechainKey.PrivateKey)
 
 	mainchainClient, err := ethclient.Dial(viper.GetString("mainchainEndpoint"))
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 
 	sidechainClient, err := ethclient.Dial(viper.GetString("sidechainEndpoint"))
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 
@@ -101,7 +103,7 @@ func NewAggregator(
 	rollupChain, err :=
 		mainchain.NewRollupChain(common.HexToAddress(rollupChainAddress), mainchainClient)
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 
@@ -109,21 +111,22 @@ func NewAggregator(
 	validatorRegistry, err :=
 		mainchain.NewValidatorRegistry(common.HexToAddress(validatorRegistryAddress), mainchainClient)
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 
 	blockCommitteeAddress := viper.GetString("blockCommittee")
+	log.Debug().Str("blockCommitteeAddress", blockCommitteeAddress).Send()
 	blockCommittee, err :=
 		sidechain.NewBlockCommittee(common.HexToAddress(blockCommitteeAddress), sidechainClient)
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 
 	aggregatorStateMachine, err := statemachine.NewStateMachine(aggregatorDb, serializer)
 	if err != nil {
-		log.Fatal().Err(err).Send()
+		log.Error().Err(err).Send()
 		return nil, err
 	}
 
@@ -172,13 +175,17 @@ func NewAggregator(
 		pendingBlock:          types.NewRollupBlock(0),
 		numTransitionsInBlock: numTransitionsInBlock,
 		fraudTransfer:         fraudTransfer,
+		validatorMode:         validatorMode,
 	}, nil
 }
 
 func (a *Aggregator) Start() {
 	go a.processTransactions()
-	go a.validator.Start()
-	go a.blockSubmitter.Start()
+	if a.validatorMode {
+		go a.validator.Start()
+	} else {
+		go a.blockSubmitter.Start()
+	}
 	a.txGenerator.Start()
 }
 
@@ -194,7 +201,7 @@ func (a *Aggregator) applyTransaction(tx types.Transaction) (*types.SignedStateR
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Adding to pending block %d", tx.GetTransactionType())
+	log.Debug().Int("txType", int(tx.GetTransactionType())).Msg("Adding to pending block")
 	err = a.addToPendingBlock(stateUpdate, tx)
 	if err != nil {
 		return nil, err
@@ -299,7 +306,7 @@ func (a *Aggregator) addToPendingBlock(
 			a.pendingBlock.Transitions = append(
 				a.pendingBlock.Transitions,
 				&types.CreateAndTransferTransition{
-					TransitionType:     big.NewInt(int64(types.TransitionTypeTransfer)),
+					TransitionType:     big.NewInt(int64(types.TransitionTypeCreateAndTransfer)),
 					StateRoot:          stateRoot,
 					SenderSlotIndex:    entries[0].SlotIndex,
 					RecipientSlotIndex: entries[1].SlotIndex,

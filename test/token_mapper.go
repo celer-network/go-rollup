@@ -20,8 +20,8 @@ import (
 func RunTokenMapper(
 	mainchainKeystore string,
 	sidechainKeystore string,
-	account1Keystore string,
-	account2Keystore string,
+	user0Keystore string,
+	user1Keystore string,
 ) {
 	mainchainConn, err := ethclient.Dial(viper.GetString("mainchainEndpoint"))
 	if err != nil {
@@ -51,19 +51,19 @@ func RunTokenMapper(
 	MapToken(ctx, sidechainConn, sidechainAuth, testTokenAddress, testTokenName, testTokenSymbol, testTokenDecimals)
 	RegisterToken(ctx, mainchainConn, mainchainAuth, testTokenAddress)
 
-	account1Auth, err := utils.GetAuthFromKeystore(account1Keystore, "")
+	user0Auth, err := utils.GetAuthFromKeystore(user0Keystore, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	account2Auth, err := utils.GetAuthFromKeystore(account2Keystore, "")
+	user1Auth, err := utils.GetAuthFromKeystore(user1Keystore, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	account1PrivateKey, err := utils.GetPrivateKayFromKeystore(account1Keystore, "")
+	user0PrivateKey, err := utils.GetPrivateKayFromKeystore(user0Keystore, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	DepositAndTransfer(ctx, sidechainConn, sidechainAuth, account1Auth, account2Auth, testTokenAddress, account1PrivateKey)
+	DepositAndTransfer(ctx, sidechainConn, sidechainAuth, user0Auth, user1Auth, testTokenAddress, user0PrivateKey)
 }
 
 func RegisterToken(ctx context.Context, conn *ethclient.Client, auth *bind.TransactOpts, tokenAddress common.Address) {

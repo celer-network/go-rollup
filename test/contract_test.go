@@ -79,11 +79,11 @@ func TestDummyApp(t *testing.T) {
 		log.Fatal().Err(err).Send()
 	}
 
-	account1Auth, err := utils.GetAuthFromKeystore(account1Keystore, "")
+	user0Auth, err := utils.GetAuthFromKeystore(user0Keystore, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	account2Auth, err := utils.GetAuthFromKeystore(account2Keystore, "")
+	user1Auth, err := utils.GetAuthFromKeystore(user1Keysetore, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -100,7 +100,7 @@ func TestDummyApp(t *testing.T) {
 	checkTxStatus(receipt.Status, "Deploy DummyApp")
 	log.Printf("Deployed DummyApp at 0x%x\n", dummyAppAddress)
 
-	aggregator, err := aggregator.NewAggregator(aggregator1DbDir, validator1DbDir, node1Keystore, node1Keystore, false)
+	aggregator, err := aggregator.NewAggregator(node0AggregatorDbDir, node0ValidatorDbDir, node1Keystore, node1Keystore, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,19 +108,19 @@ func TestDummyApp(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	dummyApp, err := sidechain.NewDummyApp(dummyAppAddress, sidechainConn)
-	playerOnePrivateKey, err := utils.GetPrivateKayFromKeystore(account1Keystore, "")
+	playerOnePrivateKey, err := utils.GetPrivateKayFromKeystore(user0Keystore, "")
 	playerOneSig, err := utils.SignPackedData(
 		playerOnePrivateKey,
 		[]string{"address", "address", "uint256", "uint256"},
 		[]interface{}{
-			account1Auth.From,
+			user0Auth.From,
 			dummyAppAddress,
 			big.NewInt(1),
 			big.NewInt(0),
 		},
 	)
-	dummyApp.PlayerOneDeposit(account1Auth, playerOneSig)
-	dummyApp.PlayerTwoWithdraw(account2Auth)
+	dummyApp.PlayerOneDeposit(user0Auth, playerOneSig)
+	dummyApp.PlayerTwoWithdraw(user1Auth)
 
 	err = os.RemoveAll(testRootDir)
 	if err != nil {

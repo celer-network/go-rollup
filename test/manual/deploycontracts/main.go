@@ -12,7 +12,7 @@ import (
 func main() {
 	flag.Parse()
 	log.Logger = log.With().Caller().Logger()
-	cmdCopy := exec.Command("cp", "-a", "../config", "/tmp/celer_rollup_test")
+	cmdCopy := exec.Command("cp", "-a", "../config", "/tmp/celer-rollup-test")
 	err := cmdCopy.Run()
 	if err != nil {
 		log.Fatal().Err(err).Send()

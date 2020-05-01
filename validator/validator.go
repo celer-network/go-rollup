@@ -105,7 +105,6 @@ func (v *Validator) validateBlock(block *types.RollupBlock) {
 			}
 		}
 	}
-
 }
 
 func (v *Validator) validateTransition(
@@ -148,7 +147,7 @@ func (v *Validator) validateTransition(
 func (v *Validator) getInputStateSnapshots(transition types.Transition) ([]*types.StateSnapshot, error) {
 	switch transition.GetTransitionType() {
 	case types.TransitionTypeCreateAndDeposit:
-		// No StateSnapshot for initial accounts
+		// No StateSnapshot for newly created account
 		return nil, nil
 	case types.TransitionTypeDeposit:
 		depositTransition := transition.(*types.DepositTransition)
@@ -168,6 +167,17 @@ func (v *Validator) getInputStateSnapshots(transition types.Transition) ([]*type
 		return []*types.StateSnapshot{
 			snapshot,
 		}, nil
+	case types.TransitionTypeCreateAndTransfer:
+		createAndTransferTransition := transition.(*types.CreateAndTransferTransition)
+		log.Debug().Uint64("nonce", createAndTransferTransition.Nonce.Uint64()).Msg("getInputStateSnapshots createAndTransfer")
+		senderSnapshot, err := v.stateMachine.GetStateSnapshot(createAndTransferTransition.SenderSlotIndex.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		return []*types.StateSnapshot{
+			senderSnapshot,
+			nil, // No StateSnapshot for newly created account
+		}, err
 	case types.TransitionTypeTransfer:
 		transferTransition := transition.(*types.TransferTransition)
 		log.Debug().Uint64("nonce", transferTransition.Nonce.Uint64()).Msg("getInputStateSnapshots transfer")
@@ -244,6 +254,28 @@ func (v *Validator) getTransactionFromTransitionAndSnapshots(
 			Amount:    withdrawTransition.Amount,
 			Nonce:     withdrawTransition.Nonce,
 			Signature: withdrawTransition.Signature,
+		}
+	case types.TransitionTypeCreateAndTransfer:
+		createAndTransferTransition := transition.(*types.CreateAndTransferTransition)
+		senderInfo := snapshots[0].AccountInfo
+		sender := senderInfo.Account
+		recipient := createAndTransferTransition.Recipient
+		tokenIndex := createAndTransferTransition.TokenIndex
+		nonce := createAndTransferTransition.Nonce
+		tokenBytes, exists, err := v.db.Get(db.NamespaceTokenIndexToTokenAddress, tokenIndex.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, errors.New("Invalid token")
+		}
+		tx = &types.TransferTransaction{
+			Sender:    sender,
+			Recipient: recipient,
+			Token:     common.BytesToAddress(tokenBytes),
+			Amount:    createAndTransferTransition.Amount,
+			Nonce:     nonce,
+			Signature: transition.GetSignature(),
 		}
 	case types.TransitionTypeTransfer:
 		transferTransition := transition.(*types.TransferTransition)
@@ -396,6 +428,6 @@ func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) er
 		log.Error().Str("tx", tx.Hash().Hex()).Msg("Failed to submit fraud proof")
 		return errors.New("Failed to submit fraud proof")
 	}
-	log.Debug().Msg("Successfully submitted fraud proof")
+	log.Debug().Str("tx", tx.Hash().Hex()).Msg("Successfully submitted fraud proof")
 	return nil
 }

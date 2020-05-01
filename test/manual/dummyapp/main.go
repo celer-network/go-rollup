@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"math/big"
-	"os"
 
 	"github.com/celer-network/go-rollup/test"
 	"github.com/celer-network/go-rollup/utils"
@@ -19,11 +17,11 @@ import (
 )
 
 var (
-	config            = flag.String("config", "/tmp/celer_rollup_test/config", "Config directory")
+	config            = flag.String("config", "/tmp/celer-rollup-test/config", "Config directory")
 	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/mainchain_etherbase.json", "Path to mainchain keystore")
 	sidechainKeystore = flag.String("sidechainkeystore", "env/keystore/sidechain_etherbase.json", "Path to sidechain keystore")
-	account1Keystore  = flag.String("account1keystore", "env/keystore/account1.json", "Path to account 1 keystore")
-	account2Keystore  = flag.String("account2keystore", "env/keystore/account2.json", "Path to account 2 keystore")
+	user0Keystore     = flag.String("user0keystore", "env/keystore/user0.json", "Path to user 0 keystore")
+	user1Keystore     = flag.String("user1keystore", "env/keystore/user1.json", "Path to user 1 keystore")
 )
 
 func main() {
@@ -40,9 +38,9 @@ func main() {
 	viper.SetConfigName("test_token")
 	viper.MergeInConfig()
 
-	test.DeployMainchainContracts()
-	test.DeploySidechainContracts()
-	test.SetupConfig()
+	// test.DeployMainchainContracts()
+	// test.DeploySidechainContracts()
+	// test.SetupConfig()
 
 	mainchainConn, err := ethclient.Dial(viper.GetString("mainchainEndpoint"))
 	if err != nil {
@@ -84,11 +82,11 @@ func main() {
 
 	go watchTransfer(sidechainErc20Address, sidechainConn)
 
-	account1Auth, err := utils.GetAuthFromKeystore(*account1Keystore, "")
+	user0Auth, err := utils.GetAuthFromKeystore(*user0Keystore, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	account2Auth, err := utils.GetAuthFromKeystore(*account2Keystore, "")
+	user1Auth, err := utils.GetAuthFromKeystore(*user1Keystore, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -111,27 +109,31 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	tx, err = sidechainErc20.Deposit(account1Auth, account1Auth.From, big.NewInt(1), nil)
-	utils.WaitMined(ctx, sidechainConn, tx, 0)
 
 	// Start aggregator manually
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	// log.Info().Msg("Press Enter")
+	// bufio.NewReader(os.Stdin).ReadBytes('\n')
+
+	tx, err = sidechainErc20.Deposit(user0Auth, user0Auth.From, big.NewInt(1), nil)
+	utils.WaitMined(ctx, sidechainConn, tx, 0)
 
 	dummyApp, err := sidechain.NewDummyApp(dummyAppAddress, sidechainConn)
-	playerOnePrivateKey, err := utils.GetPrivateKayFromKeystore(*account1Keystore, "")
+	playerOnePrivateKey, err := utils.GetPrivateKayFromKeystore(*user0Keystore, "")
 	playerOneSig, err := utils.SignPackedData(
 		playerOnePrivateKey,
-		[]string{"address", "address", "uint256", "uint256"},
+		[]string{"address", "address", "address", "uint256", "uint256"},
 		[]interface{}{
-			account1Auth.From,
+			user0Auth.From,
 			dummyAppAddress,
-			big.NewInt(1),
-			big.NewInt(1),
+			testTokenAddress,
+			big.NewInt(1), // amount
+			big.NewInt(0), // nonce
 		},
 	)
-	log.Debug().Str("playerOneSig", common.Bytes2Hex(playerOneSig)).Send()
-	account1Auth.GasLimit = 10000000
-	tx, err = dummyApp.PlayerOneDeposit(account1Auth, playerOneSig)
+	// log.Debug().Str("playerOneSig", common.Bytes2Hex(playerOneSig)).Send()
+	user0Auth.GasLimit = 10000000
+	log.Info().Msg("Player 1 deposits into DummyApp and the contract sends the tokens to Player 2")
+	tx, err = dummyApp.PlayerOneDeposit(user0Auth, playerOneSig)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -141,10 +143,12 @@ func main() {
 		log.Fatal().Err(err).Send()
 	}
 	if receipt.Status != 1 {
-		log.Fatal().Err(errors.New("Failed player 1 deposit")).Send()
+		log.Fatal().Str("tx", tx.Hash().Hex()).Err(errors.New("Failed player 1 deposit")).Send()
 	}
 
-	tx, err = dummyApp.PlayerTwoWithdraw(account2Auth)
+	user1Auth.GasLimit = 10000000
+	log.Info().Msg("Player 2 withdraws the tokens from DummyApp")
+	tx, err = dummyApp.PlayerTwoWithdraw(user1Auth)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -153,7 +157,7 @@ func main() {
 		log.Fatal().Err(err).Send()
 	}
 	if receipt.Status != 1 {
-		log.Fatal().Err(errors.New("Failed player 2 withdraw")).Send()
+		log.Fatal().Str("tx", tx.Hash().Hex()).Err(errors.New("Failed player 2 withdraw")).Send()
 	}
 }
 

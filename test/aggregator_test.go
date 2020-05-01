@@ -33,7 +33,7 @@ func TestSubmitBlock(t *testing.T) {
 	DeploySidechainContracts()
 	SetupConfig()
 
-	aggregator, err := aggregator.NewAggregator(aggregator1DbDir, validator1DbDir, node1Keystore, node1Keystore, false)
+	aggregator, err := aggregator.NewAggregator(node0AggregatorDbDir, node0ValidatorDbDir, node1Keystore, node1Keystore, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,8 +43,8 @@ func TestSubmitBlock(t *testing.T) {
 	RunTokenMapper(
 		mainchainEtherbaseKeystore,
 		sidechainEtherbaseKeystore,
-		account1Keystore,
-		account2Keystore,
+		user0Keystore,
+		user1Keysetore,
 	)
 
 	time.Sleep(2 * time.Second)

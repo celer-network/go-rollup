@@ -19,9 +19,9 @@ import (
 )
 
 var (
-	config            = flag.String("config", "/tmp/celer_rollup_test/config", "Config directory")
-	fraudsterDb       = flag.String("config", "/tmp/celer_rollup_test/fraudsterDb", "DB directory")
-	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/aggregator1.json", "Path to mainchain keystore")
+	config            = flag.String("config", "/tmp/celer-rollup-test/config", "Config directory")
+	fraudsterDb       = flag.String("config", "/tmp/celer-rollup-test/fraudsterDb", "DB directory")
+	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/node1.json", "Path to mainchain keystore")
 )
 
 type Fraudster struct {

@@ -34,20 +34,20 @@ func NewTransactionGenerator(
 ) *TransactionGenerator {
 	sidechainClient, err := ethclient.Dial(viper.GetString("sideChainEndpoint"))
 	if err != nil {
-		log.Fatal().Msg(err.Error())
+		log.Error().Err(err).Send()
 	}
 
 	tokenRegistryAddress := viper.GetString("tokenRegistry")
 	log.Printf("tokenRegistryAddress %s", tokenRegistryAddress)
 	tokenRegistry, err := mainchain.NewTokenRegistry(common.HexToAddress(tokenRegistryAddress), mainchainClient)
 	if err != nil {
-		log.Fatal().Msg(err.Error())
+		log.Error().Err(err).Send()
 	}
 
 	tokenMapperAddress := viper.GetString("tokenMapper")
 	tokenMapper, err := sidechain.NewTokenMapper(common.HexToAddress(tokenMapperAddress), sidechainClient)
 	if err != nil {
-		log.Fatal().Msg(err.Error())
+		log.Error().Err(err).Send()
 	}
 
 	return &TransactionGenerator{
@@ -73,8 +73,8 @@ func (tg *TransactionGenerator) watchTransition() {
 	tg.rollupChain.WatchTransition(&bind.WatchOpts{}, channel)
 	for {
 		select {
-		case event := <-channel:
-			log.Debug().Int("data length", len(event.Data)).Str("data", common.Bytes2Hex(event.Data)).Msg("Caught Transition")
+		case _ = <-channel:
+			//log.Debug().Int("data length", len(event.Data)).Str("data", common.Bytes2Hex(event.Data)).Msg("Caught Transition")
 		}
 	}
 }
@@ -195,6 +195,7 @@ func (tg *TransactionGenerator) watchToken(contract *sidechain.SidechainERC20) e
 				Nonce:     event.Nonce,
 				Signature: event.Signature,
 			}
+		case _ = <-transferSub.Err():
 		case event := <-depositChannel:
 			log.Print("Caught deposit")
 			tg.txQueue <- &types.DepositTransaction{
@@ -203,6 +204,7 @@ func (tg *TransactionGenerator) watchToken(contract *sidechain.SidechainERC20) e
 				Amount:    event.Amount,
 				Signature: event.Signature,
 			}
+		case _ = <-depositSub.Err():
 		case event := <-withdrawChannel:
 			log.Print("Caught withdraw")
 			tg.txQueue <- &types.WithdrawTransaction{
@@ -212,12 +214,7 @@ func (tg *TransactionGenerator) watchToken(contract *sidechain.SidechainERC20) e
 				Nonce:     event.Nonce,
 				Signature: event.Signature,
 			}
-		case err := <-transferSub.Err():
-			return err
-		case err := <-depositSub.Err():
-			return err
-		case err := <-withdrawSub.Err():
-			return err
+		case _ = <-withdrawSub.Err():
 		}
 	}
 }

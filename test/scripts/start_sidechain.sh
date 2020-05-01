@@ -1,5 +1,5 @@
 #!/bin/sh
-dataDir="${1:-/tmp/celer_rollup_test/sidechaindata}"
+dataDir="${1:-/tmp/celer-rollup-test/sidechaindata}"
 keystore="${2:-env/keystore}"
 geth --datadir "$dataDir" init env/sidechain_genesis.json
 geth --networkid 883 --cache 256 --syncmode full --nousb --nodiscover --maxpeers 0 \

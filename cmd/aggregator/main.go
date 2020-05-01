@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"os"
 
 	"github.com/rs/zerolog/pkgerrors"
 
@@ -13,12 +12,13 @@ import (
 )
 
 var (
-	config            = flag.String("config", "/tmp/celer_rollup_test/config", "Config directory")
-	aggregatorDbDir   = flag.String("aggregatordb", "/tmp/celer_rollup_test/aggregator1Db", "Aggregator DB directory")
-	validatorDbDir    = flag.String("validatordb", "/tmp/celer_rollup_test/validator1Db", "Validator DB directory")
-	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/node1.json", "Mainchain keystore file")
-	sidechainKeystore = flag.String("sidechainkeystore", "env/keystore/node1.json", "Sidechain keystore file")
+	config            = flag.String("config", "/tmp/celer-rollup-test/config", "Config directory")
+	aggregatorDbDir   = flag.String("aggregatordb", "/tmp/celer-rollup-test/node0_aggregator_db", "Aggregator DB directory")
+	validatorDbDir    = flag.String("validatordb", "/tmp/celer-rollup-test/node0_validator_db", "Validator DB directory")
+	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/node0.json", "Mainchain keystore file")
+	sidechainKeystore = flag.String("sidechainkeystore", "env/keystore/node0.json", "Sidechain keystore file")
 	fraudTransfer     = flag.Bool("fraudtransfer", false, "Submit bad state root for transfers")
+	validatorMode     = flag.Bool("validatormode", false, "Run in validator mode")
 )
 
 func main() {
@@ -41,9 +41,10 @@ func main() {
 			*mainchainKeystore,
 			*sidechainKeystore,
 			*fraudTransfer,
+			*validatorMode,
 		)
 	if err != nil {
-		os.Exit(1)
+		log.Fatal().Err(err).Send()
 	}
 	aggregator.Start()
 	<-make(chan interface{})

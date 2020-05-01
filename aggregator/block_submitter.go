@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"math/big"
+	"sync"
 
 	rollupdb "github.com/celer-network/go-rollup/db"
 
@@ -36,6 +37,7 @@ type BlockSubmitter struct {
 	blockCommittee          *sidechain.BlockCommittee
 	currentProposer         common.Address
 	currentCommitter        common.Address
+	lock                    sync.Mutex
 }
 
 func NewBlockSubmitter(
@@ -69,29 +71,33 @@ func (bs *BlockSubmitter) Start() {
 }
 
 func (bs *BlockSubmitter) watchBlockCommittee() error {
+	log.Print("Watching BlockCommittee")
 	blockProposedChannel := make(chan *sidechain.BlockCommitteeBlockProposed)
 	blockConsensusReachedChannel := make(chan *sidechain.BlockCommitteeBlockConsensusReached)
-	blockConsensusReachedSub, err :=
-		bs.blockCommittee.WatchBlockConsensusReached(&bind.WatchOpts{}, blockConsensusReachedChannel)
+
+	blockProposedSub, err := bs.blockCommittee.WatchBlockProposed(&bind.WatchOpts{}, blockProposedChannel)
 	if err != nil {
 		return err
 	}
-	blockProposedSub, err := bs.blockCommittee.WatchBlockProposed(&bind.WatchOpts{}, blockProposedChannel)
+	blockConsensusReachedSub, err :=
+		bs.blockCommittee.WatchBlockConsensusReached(&bind.WatchOpts{}, blockConsensusReachedChannel)
 	if err != nil {
 		return err
 	}
 	for {
 		select {
 		case event := <-blockProposedChannel:
-			log.Debug().Uint64("blockNumber", event.Proposal.BlockNumber.Uint64()).Msg("Caught BlockProposed")
-			bs.submitSignature(&event.Proposal)
+			bs.lock.Lock()
+			log.Debug().Uint64("blockNumber", event.BlockNumber.Uint64()).Msg("Caught BlockProposed")
+			bs.submitSignature(event.BlockNumber, event.Transitions)
+			bs.lock.Unlock()
+		case _ = <-blockProposedSub.Err():
 		case event := <-blockConsensusReachedChannel:
+			bs.lock.Lock()
 			log.Debug().Uint64("blockNumber", event.Proposal.BlockNumber.Uint64()).Msg("Caught BlockConsensusReached")
 			bs.commitBlock(&event.Proposal, event.Signatures)
-		case err := <-blockProposedSub.Err():
-			return err
-		case err := <-blockConsensusReachedSub.Err():
-			return err
+			bs.lock.Unlock()
+		case _ = <-blockConsensusReachedSub.Err():
 		}
 	}
 }
@@ -162,11 +168,12 @@ func (bs *BlockSubmitter) commitBlock(
 	if receipt.Status != 1 {
 		return errors.New("Failed to commit block")
 	}
+	log.Debug().Str("tx", tx.Hash().Hex()).Msg("Committed block")
 	block, _ := bs.rollupChain.Blocks(&bind.CallOpts{}, big.NewInt(0))
 	log.Printf("Contract block root hash: %s", common.Bytes2Hex(block.RootHash[:]))
 	tree, _ := smt.NewSparseMerkleTree(memorydb.NewDB(), rollupdb.NamespaceRollupBlockTrie, sha3.NewLegacyKeccak256(), nil, int(block.BlockSize.Uint64()), false)
 	for i, encodedTransition := range proposal.Transitions {
-		log.Debug().Str("encodedTransition", common.Bytes2Hex(encodedTransition)).Send()
+		//log.Debug().Str("encodedTransition", common.Bytes2Hex(encodedTransition)).Send()
 		_, _ = tree.Update(big.NewInt(int64(i)).Bytes(), encodedTransition)
 	}
 	log.Printf("Local block root hash: %s", common.Bytes2Hex(tree.Root()))
@@ -174,7 +181,7 @@ func (bs *BlockSubmitter) commitBlock(
 	return nil
 }
 
-func (bs *BlockSubmitter) submitSignature(proposal *sidechain.BlockCommitteeBlockProposal) error {
+func (bs *BlockSubmitter) submitSignature(blockNumber *big.Int, transitions [][]byte) error {
 	proposerAddress, err := bs.blockCommittee.CurrentProposer(&bind.CallOpts{})
 	if err != nil {
 		return err
@@ -183,7 +190,7 @@ func (bs *BlockSubmitter) submitSignature(proposal *sidechain.BlockCommitteeBloc
 	if bytes.Equal(bs.mainchainAuth.From.Bytes(), proposerAddress.Bytes()) {
 		return nil
 	}
-	encodedBlock, err := types.EncodeBlock(bs.serializer, proposal.BlockNumber, proposal.Transitions)
+	encodedBlock, err := types.EncodeBlock(bs.serializer, blockNumber, transitions)
 	if err != nil {
 		return err
 	}
@@ -191,6 +198,8 @@ func (bs *BlockSubmitter) submitSignature(proposal *sidechain.BlockCommitteeBloc
 	if err != nil {
 		return err
 	}
+	log.Debug().Uint64("blockNumber", blockNumber.Uint64()).Msg("Submitting signature for block")
+	bs.sidechainAuth.GasLimit = 10000000
 	tx, err := bs.blockCommittee.SignBlock(bs.sidechainAuth, bs.sidechainAuth.From, signature)
 	if err != nil {
 		return err
@@ -200,7 +209,9 @@ func (bs *BlockSubmitter) submitSignature(proposal *sidechain.BlockCommitteeBloc
 		return err
 	}
 	if receipt.Status != 1 {
+		log.Error().Str("tx", tx.Hash().Hex()).Msg("Failed to submit signature")
 		return errors.New("Failed to submit block proposal signature")
 	}
+	log.Debug().Str("tx", tx.Hash().Hex()).Msg("Submitted signature")
 	return nil
 }
