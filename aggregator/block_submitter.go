@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/celer-network/go-rollup/db"
 	rollupdb "github.com/celer-network/go-rollup/db"
 
 	"github.com/celer-network/go-rollup/db/memorydb"
@@ -31,6 +32,7 @@ type BlockSubmitter struct {
 	sidechainClient         *ethclient.Client
 	sidechainAuth           *bind.TransactOpts
 	sidechainAuthPrivateKey *ecdsa.PrivateKey
+	aggregatorDb            db.DB
 	serializer              *types.Serializer
 	rollupChain             *mainchain.RollupChain
 	validatorRegistry       *mainchain.ValidatorRegistry
@@ -47,6 +49,7 @@ func NewBlockSubmitter(
 	sidechainClient *ethclient.Client,
 	sidechainAuth *bind.TransactOpts,
 	sidechainAuthPrivateKey *ecdsa.PrivateKey,
+	aggregatorDb db.DB,
 	serializer *types.Serializer,
 	rollupChain *mainchain.RollupChain,
 	validatorRegistry *mainchain.ValidatorRegistry,
@@ -59,6 +62,7 @@ func NewBlockSubmitter(
 		sidechainClient:         sidechainClient,
 		sidechainAuth:           sidechainAuth,
 		sidechainAuthPrivateKey: sidechainAuthPrivateKey,
+		aggregatorDb:            aggregatorDb,
 		serializer:              serializer,
 		rollupChain:             rollupChain,
 		validatorRegistry:       validatorRegistry,
@@ -68,6 +72,7 @@ func NewBlockSubmitter(
 
 func (bs *BlockSubmitter) Start() {
 	go bs.watchBlockCommittee()
+	go bs.watchRollupBlockCommitted()
 }
 
 func (bs *BlockSubmitter) watchBlockCommittee() error {
@@ -111,7 +116,7 @@ func (bs *BlockSubmitter) proposeBlock(pendingBlock *types.RollupBlock) (bool, e
 	if !bytes.Equal(bs.sidechainAuth.From.Bytes(), proposerAddress.Bytes()) {
 		return false, nil
 	}
-	serializedTransitions, encodedBlock, err := pendingBlock.SerializeForSubmission(bs.serializer)
+	serializedTransitions, encodedBlock, err := pendingBlock.Serialize(bs.serializer)
 	if err != nil {
 		return false, err
 	}
@@ -214,4 +219,34 @@ func (bs *BlockSubmitter) submitSignature(blockNumber *big.Int, transitions [][]
 	}
 	log.Debug().Str("tx", tx.Hash().Hex()).Msg("Submitted signature")
 	return nil
+}
+
+func (bs *BlockSubmitter) watchRollupBlockCommitted() error {
+	channel := make(chan *mainchain.RollupChainRollupBlockCommitted)
+	sub, err := bs.rollupChain.WatchRollupBlockCommitted(&bind.WatchOpts{}, channel)
+	if err != nil {
+		return err
+	}
+	for {
+		select {
+		case event := <-channel:
+			log.Debug().Msg("Caught RollupBlock")
+			block, err := bs.serializer.DeserializeRollupBlockFromFields(event.BlockNumber.Uint64(), event.Transitions)
+			if err != nil {
+				log.Err(err).Msg("Failed to deserialize block")
+				return err
+			}
+			_, serializedBlock, err := block.Serialize(bs.serializer)
+			if err != nil {
+				log.Err(err).Send()
+			}
+			log.Debug().Str("serializedBlock", common.Bytes2Hex(serializedBlock)).Msg("Serialized block")
+			err = bs.aggregatorDb.Set(rollupdb.NamespaceRollupBlockNumber, big.NewInt(int64(block.BlockNumber)).Bytes(), serializedBlock)
+			if err != nil {
+				log.Err(err).Send()
+			}
+		case err := <-sub.Err():
+			return err
+		}
+	}
 }

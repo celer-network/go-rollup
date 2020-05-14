@@ -83,7 +83,7 @@ func TestDummyApp(t *testing.T) {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	user1Auth, err := utils.GetAuthFromKeystore(user1Keysetore, "")
+	user1Auth, err := utils.GetAuthFromKeystore(user1Keystore, "")
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -100,7 +100,15 @@ func TestDummyApp(t *testing.T) {
 	checkTxStatus(receipt.Status, "Deploy DummyApp")
 	log.Printf("Deployed DummyApp at 0x%x\n", dummyAppAddress)
 
-	aggregator, err := aggregator.NewAggregator(node0AggregatorDbDir, node0ValidatorDbDir, node1Keystore, node1Keystore, false, false)
+	aggregator, err := aggregator.NewAggregator(
+		node0AggregatorDbDir,
+		node0ValidatorDbDir,
+		node1Keystore,
+		node1Keystore,
+		6666,
+		false,
+		false,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

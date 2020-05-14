@@ -90,7 +90,7 @@ var (
 	node1Keystore              = filepath.Join(keystoreDir, "node1.json")
 	node2Keystore              = filepath.Join(keystoreDir, "node2.json")
 	user0Keystore              = filepath.Join(keystoreDir, "user0.json")
-	user1Keysetore             = filepath.Join(keystoreDir, "user1.json")
+	user1Keystore              = filepath.Join(keystoreDir, "user1.json")
 )
 
 // toBuild map package subpath to binary file name eg. aggregator/cmd -> aggregator means
@@ -272,7 +272,7 @@ func StartChain(
 }
 
 func DeployMainchainContracts() *MainchainContractAddresses {
-	conn, err := ethclient.Dial(filepath.Join(testRootDir, "mainchaindata/geth.ipc"))
+	conn, err := ethclient.Dial(mainchainEthEndpoint)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -280,6 +280,8 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
+	etherbaseAuth.GasLimit = 7000000
+	etherbaseAuth.GasPrice = big.NewInt(10e9) // 10 Gwei
 	ctx := context.Background()
 
 	validatorRegistryAddress, tx, validatorRegistry, err := mainchain.DeployValidatorRegistry(
@@ -287,57 +289,31 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 		conn,
 		[]common.Address{
 			node0Address,
-			node1Address,
-			node2Address,
 		},
 	)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err := utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Deploy ValidatorRegistry")
-	log.Printf("Deployed ValidatorRegistry at 0x%x\n", validatorRegistryAddress)
+	log.Printf("Deploying ValidatorRegistry at 0x%x\n", validatorRegistryAddress)
 
-	log.Print("Deploying AccountRegistry...")
 	accountRegistryAddress, tx, _, err := mainchain.DeployAccountRegistry(etherbaseAuth, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Deploy AccountRegistry")
-	log.Printf("Deployed AccountRegistry at 0x%x\n", accountRegistryAddress)
+	log.Printf("Deploying AccountRegistry at 0x%x\n", accountRegistryAddress)
 
-	log.Print("Deploying TokenRegistry...")
 	tokenRegistryAddress, tx, _, err := mainchain.DeployTokenRegistry(etherbaseAuth, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Deploy TokenRegistry")
-	log.Printf("Deployed TokenRegistry at 0x%x\n", tokenRegistryAddress)
+	log.Printf("Deploying TokenRegistry at 0x%x\n", tokenRegistryAddress)
 
-	log.Print("Deploying MerkleUtils...")
 	merkleUtilsAddress, tx, _, err := mainchain.DeployMerkleUtils(etherbaseAuth, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Deploy MerkleUtils")
-	log.Printf("Deployed MerkleUtils at 0x%x\n", merkleUtilsAddress)
+	log.Printf("Deploying MerkleUtils at 0x%x\n", merkleUtilsAddress)
 
-	log.Print("Deploying TransitionEvaluator...")
 	transitionEvaluatorAddress, tx, _, err :=
 		mainchain.DeployTransitionEvaluator(
 			etherbaseAuth,
@@ -347,14 +323,8 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Deploy TransitionEvaluator")
-	log.Printf("Deployed TransitionEvaluator at 0x%x\n", transitionEvaluatorAddress)
+	log.Printf("Deploying TransitionEvaluator at 0x%x\n", transitionEvaluatorAddress)
 
-	log.Print("Deploying RollupChain...")
 	rollupChainAddress, tx, _, err :=
 		mainchain.DeployRollupChain(
 			etherbaseAuth,
@@ -368,14 +338,8 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Deploy RollupChain")
-	log.Printf("Deployed RollupChain at 0x%x\n", rollupChainAddress)
+	log.Printf("Deploying RollupChain at 0x%x\n", rollupChainAddress)
 
-	log.Print("Deploying DepositWithdrawManager...")
 	depositWithdrawManagerAddress, tx, _, err :=
 		mainchain.DeployDepositWithdrawManager(
 			etherbaseAuth,
@@ -388,23 +352,13 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Deploy DepositWithdrawManager")
-	log.Printf("Deployed DepositWithdrawManager at 0x%x\n", depositWithdrawManagerAddress)
+	log.Printf("Deploying DepositWithdrawManager at 0x%x\n", depositWithdrawManagerAddress)
 
-	log.Print("Setting RollupChain for ValidatorRegistry...")
 	tx, err = validatorRegistry.SetRollupChainAddress(etherbaseAuth, rollupChainAddress)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Set RollupChain for ValidatorRegistry")
+	log.Print("Setting RollupChain for ValidatorRegistry...")
 
 	initAmt := new(big.Int)
 	initAmt.SetString("500000000000000000000000000000000000000000000", 10)
@@ -412,7 +366,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
+	receipt, err := utils.WaitMined(ctx, conn, tx, 0)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
@@ -427,17 +381,25 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	}
 	saveTestTokenInfo(info)
 
-	// Transfer ERC20 to aggregator
+	user0Auth, err := utils.GetAuthFromKeystore(user0Keystore, "")
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	user1Auth, err := utils.GetAuthFromKeystore(user1Keystore, "")
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	// Transfer ERC20 to accounts
 	moonAmt := new(big.Int)
 	moonAmt.SetString("500000000000000000000000000000", 10)
-	addrs := []common.Address{node0Address}
+	addrs := []common.Address{user0Auth.From, user1Auth.From}
 	for _, addr := range addrs {
 		tx, err = erc20.Transfer(etherbaseAuth, addr, moonAmt)
 		if err != nil {
 			log.Fatal().Err(err).Send()
 		}
-		utils.WaitMined(ctx, conn, tx, 0)
 	}
+	utils.WaitMined(ctx, conn, tx, 0)
 	log.Printf("Sent MOON to recipients")
 
 	a := &MainchainContractAddresses{
@@ -465,31 +427,23 @@ func DeploySidechainContracts() *SidechainContractAddresses {
 	}
 	ctx := context.Background()
 
-	log.Print("Deploying TokenMapper...")
 	tokenMapperAddress, tx, _, err := sidechain.DeployTokenMapper(etherbaseAuth, conn)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err := utils.WaitMined(ctx, conn, tx, 0)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	checkTxStatus(receipt.Status, "Deploy TokenMapper")
-	log.Printf("Deployed TokenMapper at 0x%x\n", tokenMapperAddress)
+	log.Printf("Deploying TokenMapper at 0x%x\n", tokenMapperAddress)
 
 	blockCommitteeAddress, tx, _, err := sidechain.DeployBlockCommittee(
 		etherbaseAuth,
 		conn,
 		[]common.Address{
 			node0Address,
-			node1Address,
-			node2Address,
 		},
 	)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	receipt, err = utils.WaitMined(ctx, conn, tx, 0)
+	receipt, err := utils.WaitMined(ctx, conn, tx, 0)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}

@@ -59,7 +59,7 @@ func (v *Validator) watchRollupBlockCommitted() error {
 		select {
 		case event := <-channel:
 			log.Debug().Msg("Caught RollupBlock")
-			rollupBlock, err := v.serializer.DeserializeRollupBlock(event.BlockNumber.Uint64(), event.Transitions)
+			rollupBlock, err := v.serializer.DeserializeRollupBlockFromFields(event.BlockNumber.Uint64(), event.Transitions)
 			if err != nil {
 				log.Err(err).Msg("Failed to deserialize block")
 				return err
@@ -73,7 +73,7 @@ func (v *Validator) watchRollupBlockCommitted() error {
 
 func (v *Validator) validateBlock(block *types.RollupBlock) {
 	// TODO: Validate block number
-	serializedBlock, err := block.SerializeForStorage()
+	_, serializedBlock, err := block.Serialize(v.serializer)
 	if err != nil {
 		log.Err(err).Send()
 	}
@@ -324,7 +324,7 @@ func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFr
 		}
 	}
 
-	blockInfo, err := NewRollupBlockInfo(v.serializer, block)
+	blockInfo, err := types.NewRollupBlockInfo(v.serializer, block)
 	if err != nil {
 		return nil, err
 	}
@@ -347,11 +347,11 @@ func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFr
 		if !exists {
 			return nil, errors.New("Non-existent block")
 		}
-		previousBlock, err := types.DeserializeRollupBlockFromStorage(previousBlockData)
+		previousBlock, err := v.serializer.DeserializeRollupBlockFromData(previousBlockData)
 		if err != nil {
 			return nil, err
 		}
-		previousBlockInfo, err := NewRollupBlockInfo(v.serializer, previousBlock)
+		previousBlockInfo, err := types.NewRollupBlockInfo(v.serializer, previousBlock)
 		if err != nil {
 			return nil, err
 		}

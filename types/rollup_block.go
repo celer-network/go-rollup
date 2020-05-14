@@ -1,7 +1,7 @@
 package types
 
 import (
-	"encoding/json"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -12,6 +12,11 @@ type RollupBlock struct {
 	Transitions []Transition
 }
 
+type storedRollupBlock struct {
+	BlockNumber *big.Int
+	Transitions [][]byte
+}
+
 func NewRollupBlock(blockNumber uint64) *RollupBlock {
 	return &RollupBlock{
 		BlockNumber: blockNumber,
@@ -19,21 +24,20 @@ func NewRollupBlock(blockNumber uint64) *RollupBlock {
 	}
 }
 
-func (block *RollupBlock) SerializeForStorage() ([]byte, error) {
-	// TODO: Check gob?
-	return json.Marshal(block)
-}
-
-func DeserializeRollupBlockFromStorage(data []byte) (*RollupBlock, error) {
-	var block RollupBlock
-	err := json.Unmarshal(data, &block)
+func (s *Serializer) DeserializeRollupBlockFromData(data []byte) (*RollupBlock, error) {
+	var storedBlock storedRollupBlock
+	rollupBlockArguments := abi.Arguments([]abi.Argument{
+		{Name: "blockNumber", Type: s.typeRegistry.uint256Ty, Indexed: false},
+		{Name: "transitions", Type: s.typeRegistry.bytesSliceTy, Indexed: false},
+	})
+	err := rollupBlockArguments.Unpack(&storedBlock, data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Deserialize RollupBlock, data %v: %w", data, err)
 	}
-	return &block, nil
+	return s.DeserializeRollupBlockFromFields(storedBlock.BlockNumber.Uint64(), storedBlock.Transitions)
 }
 
-func (s *Serializer) DeserializeRollupBlock(
+func (s *Serializer) DeserializeRollupBlockFromFields(
 	blockNumber uint64, rawTransitions [][]byte) (*RollupBlock, error) {
 	transitions := make([]Transition, len(rawTransitions))
 	for i, transitionData := range rawTransitions {
@@ -49,7 +53,7 @@ func (s *Serializer) DeserializeRollupBlock(
 	}, nil
 }
 
-func (block *RollupBlock) SerializeForSubmission(s *Serializer) ([][]byte, []byte, error) {
+func (block *RollupBlock) Serialize(s *Serializer) ([][]byte, []byte, error) {
 	transitions := block.Transitions
 	serializedTransitions := make([][]byte, len(transitions))
 	for i, transition := range block.Transitions {

@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"math/big"
 
-	"github.com/celer-network/go-rollup/bridge"
+	"github.com/celer-network/go-rollup/relayer"
 
 	"github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/validator"
@@ -33,7 +33,9 @@ type Aggregator struct {
 	txGenerator           *TransactionGenerator
 	blockSubmitter        *BlockSubmitter
 	validator             *validator.Validator
-	bridge                *bridge.Bridge
+	relayerGrpcPort       int
+	bridge                *relayer.Bridge
+	withdrawManager       *relayer.WithdrawManager
 	numTransitionsInBlock int
 	fraudTransfer         bool
 	validatorMode         bool
@@ -44,6 +46,7 @@ func NewAggregator(
 	validatorDbDir string,
 	mainchainKeystore string,
 	sidechainKeystore string,
+	relayerGrpcPort int,
 	fraudTransfer bool,
 	validatorMode bool) (*Aggregator, error) {
 	aggregatorDb, err := badgerdb.NewDB(aggregatorDbDir)
@@ -116,9 +119,16 @@ func NewAggregator(
 	}
 
 	blockCommitteeAddress := viper.GetString("blockCommittee")
-	log.Debug().Str("blockCommitteeAddress", blockCommitteeAddress).Send()
 	blockCommittee, err :=
 		sidechain.NewBlockCommittee(common.HexToAddress(blockCommitteeAddress), sidechainClient)
+	if err != nil {
+		log.Error().Err(err).Send()
+		return nil, err
+	}
+
+	depositWithdrawManagerAddress := viper.GetString("depositWithdrawManager")
+	depositWithdrawManager, err :=
+		mainchain.NewDepositWithdrawManager(common.HexToAddress(depositWithdrawManagerAddress), mainchainClient)
 	if err != nil {
 		log.Error().Err(err).Send()
 		return nil, err
@@ -140,6 +150,7 @@ func NewAggregator(
 			sidechainClient,
 			sidechainAuth,
 			sidechainKey.PrivateKey,
+			aggregatorDb,
 			serializer,
 			rollupChain,
 			validatorRegistry,
@@ -156,21 +167,32 @@ func NewAggregator(
 		rollupChain,
 	)
 
-	bridge, err := bridge.NewBridge(
+	bridge, err := relayer.NewBridge(
 		mainchainClient,
 		sidechainClient,
 		sidechainAuth,
 		sidechainKey.PrivateKey,
 	)
 
+	withdrawManager := relayer.NewWithdrawManager(
+		relayerGrpcPort,
+		mainchainClient,
+		mainchainAuth,
+		depositWithdrawManager,
+		serializer,
+		aggregatorStateMachine,
+		aggregatorDb,
+	)
+
 	return &Aggregator{
-		aggregatorDb:   aggregatorDb,
-		validatorDb:    validatorDb,
-		stateMachine:   aggregatorStateMachine,
-		txGenerator:    transactionGenerator,
-		blockSubmitter: blockSubmitter,
-		validator:      validator,
-		bridge:         bridge,
+		aggregatorDb:    aggregatorDb,
+		validatorDb:     validatorDb,
+		stateMachine:    aggregatorStateMachine,
+		txGenerator:     transactionGenerator,
+		blockSubmitter:  blockSubmitter,
+		validator:       validator,
+		bridge:          bridge,
+		withdrawManager: withdrawManager,
 
 		pendingBlock:          types.NewRollupBlock(0),
 		numTransitionsInBlock: numTransitionsInBlock,
@@ -187,6 +209,8 @@ func (a *Aggregator) Start() {
 		go a.blockSubmitter.Start()
 	}
 	a.txGenerator.Start()
+	a.bridge.Start()
+	a.withdrawManager.Start()
 }
 
 func (a *Aggregator) processTransactions() {

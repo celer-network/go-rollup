@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "github.com/celer-network/go-rollup/relayer";
+
+package relayer;
+
+message WithdrawRequest {
+  string account = 1;
+  int64 rollupBlockNumber = 2;
+  int64 transitionIndex = 3;
+  bytes signature = 4;
+}
+
+message WithdrawResponse { string transactionHash = 1; }
+
+service RelayerRpc {
+  rpc Withdraw(WithdrawRequest) returns (WithdrawResponse) {}
+}

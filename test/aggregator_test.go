@@ -33,7 +33,15 @@ func TestSubmitBlock(t *testing.T) {
 	DeploySidechainContracts()
 	SetupConfig()
 
-	aggregator, err := aggregator.NewAggregator(node0AggregatorDbDir, node0ValidatorDbDir, node1Keystore, node1Keystore, false, false)
+	aggregator, err := aggregator.NewAggregator(
+		node0AggregatorDbDir,
+		node0ValidatorDbDir,
+		node1Keystore,
+		node1Keystore,
+		6666,
+		false,
+		false,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +52,7 @@ func TestSubmitBlock(t *testing.T) {
 		mainchainEtherbaseKeystore,
 		sidechainEtherbaseKeystore,
 		user0Keystore,
-		user1Keysetore,
+		user1Keystore,
 	)
 
 	time.Sleep(2 * time.Second)

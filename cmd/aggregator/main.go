@@ -17,6 +17,7 @@ var (
 	validatorDbDir    = flag.String("validatordb", "/tmp/celer-rollup-test/node0_validator_db", "Validator DB directory")
 	mainchainKeystore = flag.String("mainchainkeystore", "env/keystore/node0.json", "Mainchain keystore file")
 	sidechainKeystore = flag.String("sidechainkeystore", "env/keystore/node0.json", "Sidechain keystore file")
+	relayerGrpcPort   = flag.Int("relayergrpcport", 6666, "Relayer gRPC port")
 	fraudTransfer     = flag.Bool("fraudtransfer", false, "Submit bad state root for transfers")
 	validatorMode     = flag.Bool("validatormode", false, "Run in validator mode")
 )
@@ -40,6 +41,7 @@ func main() {
 			*validatorDbDir,
 			*mainchainKeystore,
 			*sidechainKeystore,
+			*relayerGrpcPort,
 			*fraudTransfer,
 			*validatorMode,
 		)

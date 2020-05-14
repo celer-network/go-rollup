@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func SigIsValid(signer common.Address, data []byte, sig []byte) bool {
+func IsSignatureValid(signer common.Address, data []byte, sig []byte) bool {
 	recoveredAddr := RecoverSigner(data, sig)
 	return recoveredAddr == signer
 }

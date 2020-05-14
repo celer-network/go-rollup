@@ -1,10 +1,12 @@
-package bridge
+package relayer
 
 import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
 	"math/big"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/celer-network/go-rollup/utils"
 
@@ -31,12 +33,12 @@ func NewBridge(
 	sidechainAuth *bind.TransactOpts,
 	sidechainAuthPrivateKey *ecdsa.PrivateKey,
 ) (*Bridge, error) {
-	depositWithdrawManagerAddress := common.HexToAddress(viper.GetString("deposit_withdraw_manager"))
+	depositWithdrawManagerAddress := common.HexToAddress(viper.GetString("depositWithdrawManager"))
 	depositWithdrawManager, err := mainchain.NewDepositWithdrawManager(depositWithdrawManagerAddress, mainchainClient)
 	if err != nil {
 		return nil, err
 	}
-	tokenMapperAddress := common.HexToAddress(viper.GetString("token_mapper"))
+	tokenMapperAddress := common.HexToAddress(viper.GetString("tokenMapper"))
 	tokenMapper, err := sidechain.NewTokenMapper(tokenMapperAddress, sidechainClient)
 	return &Bridge{
 		mainchainClient:         mainchainClient,
@@ -46,6 +48,10 @@ func NewBridge(
 		depositWithdrawManager:  depositWithdrawManager,
 		tokenMapper:             tokenMapper,
 	}, nil
+}
+
+func (b *Bridge) Start() {
+	go b.watchMainchainDeposit()
 }
 
 func (b *Bridge) relayDeposit(
@@ -89,7 +95,11 @@ func (b *Bridge) watchMainchainDeposit() {
 	for {
 		select {
 		case event := <-depositChannel:
-			b.relayDeposit(event.Token, event.Account, event.Amount)
+			log.Debug().Str("token", event.Token.Hex()).Msg("Bridge caught mainchain deposit")
+			err := b.relayDeposit(event.Token, event.Account, event.Amount)
+			if err != nil {
+				log.Err(err).Send()
+			}
 		}
 	}
 

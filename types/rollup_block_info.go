@@ -1,4 +1,4 @@
-package validator
+package types
 
 import (
 	"math/big"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/celer-network/go-rollup/db/memorydb"
 	"github.com/celer-network/go-rollup/smt"
-	"github.com/celer-network/go-rollup/types"
 	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"golang.org/x/crypto/sha3"
 )
@@ -18,7 +17,7 @@ type RollupBlockInfo struct {
 	smt                *smt.SparseMerkleTree
 }
 
-func NewRollupBlockInfo(serializer *types.Serializer, rollupBlock *types.RollupBlock) (*RollupBlockInfo, error) {
+func NewRollupBlockInfo(serializer *Serializer, rollupBlock *RollupBlock) (*RollupBlockInfo, error) {
 	transitions := rollupBlock.Transitions
 	numTransitions := len(transitions)
 	smt, err := smt.NewSparseMerkleTree(memorydb.NewDB(), rollupdb.NamespaceRollupBlockTrie, sha3.NewLegacyKeccak256(), nil, numTransitions, false)
@@ -68,6 +67,6 @@ func (info *RollupBlockInfo) GetTransitionInclusionProof(transitionIndex int) (*
 	return &mainchain.DataTypesTransitionInclusionProof{
 		BlockNumber:     info.blockNumber,
 		TransitionIndex: transitionIndexInt,
-		Siblings:        types.ConvertToInclusionProof(proofData),
+		Siblings:        ConvertToInclusionProof(proofData),
 	}, nil
 }
