@@ -122,7 +122,7 @@ func (bs *BlockSubmitter) proposeBlock(pendingBlock *types.RollupBlock) (bool, e
 	}
 	signature, err := utils.SignData(bs.sidechainAuthPrivateKey, encodedBlock)
 	log.Debug().Uint64("blockNumber", pendingBlock.BlockNumber).Msg("Proposing block")
-	bs.sidechainAuth.GasLimit = 10000000
+	bs.sidechainAuth.GasLimit = 8000000
 	tx, err :=
 		bs.blockCommittee.ProposeBlock(
 			bs.sidechainAuth,
@@ -204,7 +204,7 @@ func (bs *BlockSubmitter) submitSignature(blockNumber *big.Int, transitions [][]
 		return err
 	}
 	log.Debug().Uint64("blockNumber", blockNumber.Uint64()).Msg("Submitting signature for block")
-	bs.sidechainAuth.GasLimit = 10000000
+	bs.sidechainAuth.GasLimit = 8000000
 	tx, err := bs.blockCommittee.SignBlock(bs.sidechainAuth, bs.sidechainAuth.From, signature)
 	if err != nil {
 		return err

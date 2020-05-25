@@ -7,7 +7,7 @@ geth --networkid 883 --cache 256 --syncmode full --nousb --nodiscover --maxpeers
     --etherbase ba756d65a1a03f07d205749f35e2406e4a8522ad \
     --password env/empty_password.txt \
     --netrestrict 127.0.0.1/8 --datadir "$dataDir" \
-    --keystore "$keystore" --targetgaslimit 10000000 \
+    --keystore "$keystore" --targetgaslimit 8000000 \
     --port 30304 \
     --rpc --rpcport 8547 --rpccorsdomain '*' \
     --rpcapi admin,debug,eth,miner,net,personal,txpool,web3 \

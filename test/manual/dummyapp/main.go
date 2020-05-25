@@ -131,7 +131,7 @@ func main() {
 		},
 	)
 	// log.Debug().Str("playerOneSig", common.Bytes2Hex(playerOneSig)).Send()
-	user0Auth.GasLimit = 10000000
+	user0Auth.GasLimit = 8000000
 	log.Info().Msg("Player 1 deposits into DummyApp and the contract sends the tokens to Player 2")
 	tx, err = dummyApp.PlayerOneDeposit(user0Auth, playerOneSig)
 	if err != nil {
@@ -146,7 +146,7 @@ func main() {
 		log.Fatal().Str("tx", tx.Hash().Hex()).Err(errors.New("Failed player 1 deposit")).Send()
 	}
 
-	user1Auth.GasLimit = 10000000
+	user1Auth.GasLimit = 8000000
 	log.Info().Msg("Player 2 withdraws the tokens from DummyApp")
 	tx, err = dummyApp.PlayerTwoWithdraw(user1Auth)
 	if err != nil {

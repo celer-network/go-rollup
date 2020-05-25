@@ -373,7 +373,7 @@ func (v *Validator) generateContractFraudProof(block *types.RollupBlock, localFr
 }
 
 func (v *Validator) submitContractFraudProof(proof *types.ContractFraudProof) error {
-	v.mainchainAuth.GasLimit = 10000000
+	v.mainchainAuth.GasLimit = 8000000
 	committerAddress, err := v.rollupChain.CommitterAddress(&bind.CallOpts{})
 	if err != nil {
 		return err

@@ -239,7 +239,7 @@ func StartChain(
 	// actually run geth, blocking. set syncmode full to avoid bloom mem cache by fast sync
 	cmd := exec.Command(
 		"geth", "--networkid", strconv.Itoa(networkId), "--cache", "256", "--nousb", "--syncmode", "full", "--nodiscover", "--maxpeers", "0",
-		"--netrestrict", "127.0.0.1/8", "--datadir", chainDataDir, "--keystore", filepath.Join(chainDataDir, "keystore"), "--targetgaslimit", "10000000",
+		"--netrestrict", "127.0.0.1/8", "--datadir", chainDataDir, "--keystore", filepath.Join(chainDataDir, "keystore"), "--targetgaslimit", "8000000",
 		"--mine", "--allow-insecure-unlock", "--unlock", etherbase, "--etherbase", etherbase, "--password", emptyPasswordFile,
 		"--port", strconv.Itoa(port),
 		"--rpc", "--rpcport", strconv.Itoa(rpcPort), "--rpccorsdomain", "*",
@@ -280,7 +280,7 @@ func DeployMainchainContracts() *MainchainContractAddresses {
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
-	etherbaseAuth.GasLimit = 7000000
+	etherbaseAuth.GasLimit = 8000000
 	etherbaseAuth.GasPrice = big.NewInt(10e9) // 10 Gwei
 	ctx := context.Background()
 
