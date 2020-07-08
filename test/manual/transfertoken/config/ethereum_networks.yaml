@@ -1,0 +1,2 @@
+mainchainEndpoint: wss://ropsten.infura.io/ws/v3/a095e4662b074fee82001b62e5012eeb
+sidechainEndpoint: ws://54.186.171.203:8548
