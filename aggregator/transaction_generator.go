@@ -1,12 +1,15 @@
 package aggregator
 
 import (
+	"context"
+
 	"github.com/celer-network/go-rollup/db"
 	"github.com/celer-network/go-rollup/types"
 	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -19,6 +22,7 @@ const (
 type TransactionGenerator struct {
 	aggregatorDb    db.DB
 	validatorDb     db.DB
+	mainchainClient *ethclient.Client
 	sidechainClient *ethclient.Client
 	rollupChain     *mainchain.RollupChain
 	tokenRegistry   *mainchain.TokenRegistry
@@ -53,6 +57,7 @@ func NewTransactionGenerator(
 	return &TransactionGenerator{
 		aggregatorDb:    aggregatorDb,
 		validatorDb:     validatorDb,
+		mainchainClient: mainchainClient,
 		sidechainClient: sidechainClient,
 		rollupChain:     rollupChain,
 		tokenRegistry:   tokenRegistry,
@@ -62,9 +67,20 @@ func NewTransactionGenerator(
 }
 
 func (tg *TransactionGenerator) Start() {
+	go tg.watchNewHead()
 	go tg.watchTokenRegistry()
 	go tg.watchTokenMapper()
 	go tg.watchTransition()
+}
+
+func (tg *TransactionGenerator) watchNewHead() {
+	channel := make(chan *ethtypes.Header)
+	tg.mainchainClient.SubscribeNewHead(context.Background(), channel)
+	for {
+		select {
+		case _ = <-channel:
+		}
+	}
 }
 
 func (tg *TransactionGenerator) watchTransition() {
