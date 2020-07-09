@@ -156,6 +156,8 @@ func (bs *BlockSubmitter) commitBlock(
 		return nil
 	}
 	log.Debug().Uint64("blockNumber", proposal.BlockNumber.Uint64()).Msg("Committing block")
+	bs.mainchainAuth.GasLimit = 2000000
+	bs.mainchainAuth.GasPrice = big.NewInt(10e9) // 10 Gwei
 	tx, err :=
 		bs.rollupChain.CommitBlock(
 			bs.mainchainAuth,

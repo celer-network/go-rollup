@@ -31,6 +31,8 @@ func RunTokenMapper(
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
+	mainchainAuth.GasLimit = 8000000
+	mainchainAuth.GasPrice = big.NewInt(10e9) // 10 Gwei
 
 	sidechainConn, err := ethclient.Dial(viper.GetString("sidechainEndpoint"))
 	if err != nil {
@@ -124,11 +126,13 @@ func DepositAndTransfer(
 		log.Fatal().Err(err).Send()
 	}
 	amount := big.NewInt(1)
+	log.Info().Msg("Depositing on sidechain for user 1")
 	tx, err := sidechainErc20.Deposit(mapperAuth, auth1.From, amount, nil)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
 	waitMined(ctx, conn, tx)
+	log.Info().Msg("Depositing on sidechain for user 2")
 	tx, err = sidechainErc20.Deposit(mapperAuth, auth2.From, amount, nil)
 	if err != nil {
 		log.Fatal().Err(err).Send()
@@ -150,6 +154,7 @@ func DepositAndTransfer(
 			nonce,
 		},
 	)
+	log.Info().Msg("Transfering on sidechain from user 1 to user 2")
 	tx, err = sidechainErc20.Transfer(auth1, auth1.From, auth2.From, amount, signature)
 	if err != nil {
 		log.Fatal().Err(err).Send()

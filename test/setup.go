@@ -51,7 +51,7 @@ type TestTokenInfo struct {
 const (
 	testRootDir                  = "/tmp/celer-rollup-test"
 	envDir                       = "env"
-	mainchainEthEndpoint         = "ws://127.0.0.1:8546"
+	mainchainEthEndpoint         = "wss://ropsten.infura.io/ws/v3/b64e62bc284840a491fa39dedf88b6af"
 	sidechainEthEndpoint         = "ws://127.0.0.1:8548"
 	node0AddressStr              = "0x6a6d2a97da1c453a4e099e8054865a0a59728863"
 	node1AddressStr              = "0x35303ea8008313ea84563ecf186940c33c1d668f"

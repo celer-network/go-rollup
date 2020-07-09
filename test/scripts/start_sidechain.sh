@@ -9,7 +9,7 @@ geth --networkid 883 --cache 256 --syncmode full --nousb --nodiscover --maxpeers
     --netrestrict 127.0.0.1/8 --datadir "$dataDir" \
     --keystore "$keystore" --targetgaslimit 8000000 \
     --port 30304 \
-    --rpc --rpcport 8547 --rpccorsdomain '*' \
+    --rpc --rpcaddr 0.0.0.0 --rpcport 8547 --rpccorsdomain '*' \
     --rpcapi admin,debug,eth,miner,net,personal,txpool,web3 \
-    --ws --wsport 8548 --wsorigins '*' \
+    --ws --wsaddr 0.0.0.0 --wsport 8548 --wsorigins '*' \
     --wsapi admin,debug,eth,miner,net,personal,txpool,web3

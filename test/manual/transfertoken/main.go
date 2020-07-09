@@ -1,0 +1,175 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"math/big"
+	"time"
+
+	"github.com/celer-network/go-rollup/test"
+	"github.com/celer-network/go-rollup/utils"
+	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
+	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
+)
+
+var (
+	config    = flag.String("config", "manual/transfertoken/config", "Config directory")
+	keystore  = flag.String("ks", "", "Path to user 0 keystore")
+	recipient = flag.String("recipient", "", "Recipient address")
+)
+
+func main() {
+	flag.Parse()
+
+	log.Logger = log.With().Caller().Logger()
+	viper.AddConfigPath(*config)
+	viper.SetConfigName("ethereum_networks")
+	viper.MergeInConfig()
+	viper.SetConfigName("mainchain_contract_addresses")
+	viper.MergeInConfig()
+	viper.SetConfigName("sidechain_contract_addresses")
+	viper.MergeInConfig()
+	viper.SetConfigName("test_token")
+	viper.MergeInConfig()
+
+	mainchainConn, err := ethclient.Dial(viper.GetString("mainchainEndpoint"))
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	sidechainConn, err := ethclient.Dial(viper.GetString("sidechainEndpoint"))
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	privateKey, err := utils.GetPrivateKayFromKeystore(*keystore, "")
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	auth, err := utils.GetAuthFromKeystore(*keystore, "")
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+
+	testTokenAddressStr := viper.GetString("testTokenAddress")
+	testTokenAddress := common.HexToAddress(testTokenAddressStr)
+
+	ctx := context.Background()
+
+	tokenMapperAddress := common.HexToAddress(viper.GetString("tokenMapper"))
+	tokenMapper, err := sidechain.NewTokenMapper(tokenMapperAddress, sidechainConn)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+
+	depositWithdrawManagerAddress := common.HexToAddress(viper.GetString("depositWithdrawManager"))
+	depositWithdrawManager, err := mainchain.NewDepositWithdrawManager(depositWithdrawManagerAddress, mainchainConn)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	senderAddress := auth.From
+	amount := big.NewInt(1)
+	testToken, err := test.NewERC20(testTokenAddress, mainchainConn)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	tx, err := testToken.Approve(auth, depositWithdrawManagerAddress, amount)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	receipt, err := utils.WaitMined(ctx, mainchainConn, tx, 0)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	mainchainDepositNonce, err := depositWithdrawManager.DepositNonces(&bind.CallOpts{}, senderAddress, testTokenAddress)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+
+	// Deposit on the mainchain and register account for rollup security. A validator will relay
+	// the deposit
+	mainchainDepositSig, err := utils.SignPackedData(
+		privateKey,
+		[]string{"address", "string", "address", "address", "uint256", "uint256"},
+		[]interface{}{
+			depositWithdrawManagerAddress,
+			"deposit",
+			senderAddress,
+			testTokenAddress,
+			amount,
+			mainchainDepositNonce,
+		},
+	)
+	log.Info().Msg("Depositing on mainchain")
+	auth.GasLimit = 8000000
+	tx, err = depositWithdrawManager.Deposit(
+		auth,
+		senderAddress,
+		testTokenAddress,
+		amount,
+		mainchainDepositSig,
+	)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	receipt, err = utils.WaitMined(ctx, mainchainConn, tx, 0)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	if receipt.Status != 1 {
+		log.Fatal().Str("tx", tx.Hash().Hex()).Err(errors.New("Mainchain deposit for sender failed")).Send()
+	}
+	sidechainErc20Address, err := tokenMapper.MainchainTokenToSidechainToken(&bind.CallOpts{}, testTokenAddress)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	sidechainErc20, err := sidechain.NewSidechainERC20(sidechainErc20Address, sidechainConn)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	for i := 0; i < 100; i++ {
+		time.Sleep(5 * time.Second)
+		user0Balance, err := sidechainErc20.BalanceOf(&bind.CallOpts{}, senderAddress)
+		if err != nil {
+			log.Fatal().Err(err).Send()
+		}
+		if user0Balance.Cmp(big.NewInt(1)) == 0 {
+			log.Info().Msg("Depositing relayed on sidechain")
+			break
+		}
+		if i == 4 {
+			log.Fatal().Err(errors.New("Sidechain deposit failed")).Send()
+		}
+	}
+
+	// Transfer on the sidechain
+	recipientAddress := common.HexToAddress(*recipient)
+	nonce, err := sidechainErc20.TransferNonces(&bind.CallOpts{}, senderAddress)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	signature, err := utils.SignPackedData(
+		privateKey,
+		[]string{"address", "address", "address", "uint256", "uint256"},
+		[]interface{}{
+			senderAddress,
+			recipientAddress,
+			testTokenAddress,
+			amount,
+			nonce,
+		},
+	)
+	log.Info().Msg("Transfering on sidechain from sender to recipient")
+	tx, err = sidechainErc20.Transfer(auth, senderAddress, recipientAddress, amount, signature)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	receipt, err = utils.WaitMined(ctx, sidechainConn, tx, 0)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+}
