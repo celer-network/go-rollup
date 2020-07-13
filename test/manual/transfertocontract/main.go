@@ -19,9 +19,8 @@ import (
 )
 
 var (
-	config    = flag.String("config", "manual/transfertoken/config", "Config directory")
-	keystore  = flag.String("ks", "", "Path to user 0 keystore")
-	recipient = flag.String("recipient", "", "Recipient address")
+	config   = flag.String("config", "manual/transfertocontract/config", "Config directory")
+	keystore = flag.String("ks", "", "Path to user 0 keystore")
 )
 
 func main() {
@@ -146,31 +145,53 @@ func main() {
 		}
 	}
 
-	// Transfer on the sidechain
-	recipientAddress := common.HexToAddress(*recipient)
-	nonce, err := sidechainErc20.TransferNonces(&bind.CallOpts{}, senderAddress)
-	if err != nil {
-		log.Fatal().Err(err).Send()
-	}
-	transferAmount := big.NewInt(1)
-	signature, err := utils.SignPackedData(
-		privateKey,
-		[]string{"address", "address", "address", "uint256", "uint256"},
-		[]interface{}{
-			senderAddress,
-			recipientAddress,
-			testTokenAddress,
-			transferAmount,
-			nonce,
-		},
-	)
-	log.Info().Msg("Transfering on sidechain from sender to recipient")
-	tx, err = sidechainErc20.Transfer(auth, senderAddress, recipientAddress, transferAmount, signature)
+	log.Print("Deploying DummyApp...")
+	dummyAppAddress, tx, _, err := sidechain.DeployDummyApp(auth, sidechainConn, sidechainErc20Address)
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
 	receipt, err = utils.WaitMined(ctx, sidechainConn, tx, 0)
 	if err != nil {
 		log.Fatal().Err(err).Send()
+	}
+	if receipt.Status != 1 {
+		log.Fatal().Err(errors.New("Failed deployment")).Send()
+	}
+	log.Printf("Deployed DummyApp at 0x%x\n", dummyAppAddress)
+
+	sidechainErc20, err = sidechain.NewSidechainERC20(sidechainErc20Address, sidechainConn)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+
+	nonce, err := sidechainErc20.TransferNonces(&bind.CallOpts{}, senderAddress)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	dummyApp, err := sidechain.NewDummyApp(dummyAppAddress, sidechainConn)
+	playerOneSig, err := utils.SignPackedData(
+		privateKey,
+		[]string{"address", "address", "address", "uint256", "uint256"},
+		[]interface{}{
+			senderAddress,
+			dummyAppAddress,
+			testTokenAddress,
+			big.NewInt(1), // amount
+			nonce,
+		},
+	)
+	auth.GasLimit = 8000000
+	log.Info().Msg("Player 1 deposits into DummyApp and the contract sends the tokens to Player 2")
+	tx, err = dummyApp.PlayerOneDeposit(auth, playerOneSig)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	log.Debug().Str("txHash", tx.Hash().Hex()).Send()
+	receipt, err = utils.WaitMined(ctx, sidechainConn, tx, 0)
+	if err != nil {
+		log.Fatal().Err(err).Send()
+	}
+	if receipt.Status != 1 {
+		log.Fatal().Str("tx", tx.Hash().Hex()).Err(errors.New("Failed player 1 deposit")).Send()
 	}
 }
