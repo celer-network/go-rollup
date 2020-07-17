@@ -19,6 +19,7 @@ geth account new
 
 ```shellscript
 git clone https://github.com/celer-network/go-rollup
+cd test
 ```
 
 5. For an example of account-to-account transfer, run

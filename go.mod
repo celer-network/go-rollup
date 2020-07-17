@@ -44,4 +44,4 @@ require (
 	gopkg.in/yaml.v2 v2.2.8
 )
 
-replace github.com/celer-network/rollup-contracts => ../rollup-contracts
+// replace github.com/celer-network/rollup-contracts => ../rollup-contracts
