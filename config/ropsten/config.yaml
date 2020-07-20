@@ -1,0 +1,16 @@
+mainchain:
+  endpoint: wss://ropsten.infura.io/ws/v3/b64e62bc284840a491fa39dedf88b6af
+  contracts:
+    accountRegistry: 0xe9c8907038e5d1d0c5c081b227ff0409ad24e9bb
+    tokenRegistry: 0x05e3840be1c0a35dd4d49d7f6a5204d6247a1657
+    validatorRegistry: 0xe91d0ea168d93e426cf5af1e3e2e8538fbfb36f4
+    rollupChain: 0x3c6747eec4b8ba6d9aa3b5879f8450c85e5c4580
+    merkleUtils: 0x71ad988bf01141f359ec3865f600c999c608af32
+    depositWithdrawManager: 0x50a4ebde7323f6c35a2f4f6b8a78e23ccf2c810c
+    transitionEvaluator: 0x0d64487bddcd79eb94070ad600d5334ecb815453
+    testToken: 0x4177a142061feb41cc56e22a4b4d9fed23cc2f70
+sidechain:
+  endpoint: ws://54.186.171.203:8548
+  contracts:
+    tokenMapper: 0x6eea10a5bfce32e2fef0287e7dac1f3ea53c67b1
+    blockCommittee: 0xfb8aca1af27d352147dc0bd6f05157226ccfe6f7

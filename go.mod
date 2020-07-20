@@ -6,7 +6,7 @@ require (
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20200410125653-0a3087568c00 // indirect
 	github.com/btcsuite/btcd v0.20.1-beta // indirect
-	github.com/celer-network/rollup-contracts v0.0.0-20200420042318-d847feb999bd
+	github.com/celer-network/rollup-contracts v0.0.0-20200525090839-8a1d735cb4af
 	github.com/cespare/cp v1.1.1 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/dgraph-io/badger/v2 v2.0.3
@@ -34,6 +34,7 @@ require (
 	github.com/rs/cors v1.7.0 // indirect
 	github.com/rs/zerolog v1.18.0
 	github.com/spf13/afero v1.2.2 // indirect
+	github.com/spf13/cobra v0.0.5
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.6.3
