@@ -6,10 +6,8 @@ import (
 	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
 	"github.com/celer-network/rollup-contracts/bindings/go/sidechain"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 )
 
 const (
@@ -27,39 +25,58 @@ type TransactionGenerator struct {
 }
 
 func NewTransactionGenerator(
-	aggregatorDb db.DB,
-	validatorDb db.DB,
-	mainchainClient *ethclient.Client,
-	rollupChain *mainchain.RollupChain,
-) *TransactionGenerator {
-	sidechainClient, err := ethclient.Dial(viper.GetString("sideChainEndpoint"))
-	if err != nil {
-		log.Error().Err(err).Send()
-	}
+	aggregatorDb    db.DB,
+	validatorDb     db.DB,
+	sidechainClient *ethclient.Client,
+	rollupChain     *mainchain.RollupChain,
+	tokenRegistry   *mainchain.TokenRegistry,
+	tokenMapper     *sidechain.TokenMapper) *TransactionGenerator {
 
-	tokenRegistryAddress := viper.GetString("tokenRegistry")
-	log.Printf("tokenRegistryAddress %s", tokenRegistryAddress)
-	tokenRegistry, err := mainchain.NewTokenRegistry(common.HexToAddress(tokenRegistryAddress), mainchainClient)
-	if err != nil {
-		log.Error().Err(err).Send()
-	}
-
-	tokenMapperAddress := viper.GetString("tokenMapper")
-	tokenMapper, err := sidechain.NewTokenMapper(common.HexToAddress(tokenMapperAddress), sidechainClient)
-	if err != nil {
-		log.Error().Err(err).Send()
-	}
-
-	return &TransactionGenerator{
-		aggregatorDb:    aggregatorDb,
-		validatorDb:     validatorDb,
-		sidechainClient: sidechainClient,
-		rollupChain:     rollupChain,
-		tokenRegistry:   tokenRegistry,
-		tokenMapper:     tokenMapper,
-		txQueue:         make(chan types.Transaction, txQueueSize),
-	}
+		return &TransactionGenerator{
+			aggregatorDb:    aggregatorDb,
+			validatorDb:     validatorDb,
+			sidechainClient: sidechainClient,
+			rollupChain:     rollupChain,
+			tokenRegistry:   tokenRegistry,
+			tokenMapper:     tokenMapper,
+			txQueue:         make(chan types.Transaction, txQueueSize),
+		}
 }
+
+//func NewTransactionGenerator(
+//	aggregatorDb db.DB,
+//	validatorDb db.DB,
+//	mainchainClient *ethclient.Client,
+//	rollupChain *mainchain.RollupChain,
+//) *TransactionGenerator {
+//	sidechainClient, err := ethclient.Dial(viper.GetString("sideChainEndpoint"))
+//	if err != nil {
+//		log.Error().Err(err).Send()
+//	}
+//
+//	tokenRegistryAddress := viper.GetString("tokenRegistry")
+//	log.Printf("tokenRegistryAddress %s", tokenRegistryAddress)
+//	tokenRegistry, err := mainchain.NewTokenRegistry(common.HexToAddress(tokenRegistryAddress), mainchainClient)
+//	if err != nil {
+//		log.Error().Err(err).Send()
+//	}
+//
+//	tokenMapperAddress := viper.GetString("tokenMapper")
+//	tokenMapper, err := sidechain.NewTokenMapper(common.HexToAddress(tokenMapperAddress), sidechainClient)
+//	if err != nil {
+//		log.Error().Err(err).Send()
+//	}
+//
+//	return &TransactionGenerator{
+//		aggregatorDb:    aggregatorDb,
+//		validatorDb:     validatorDb,
+//		sidechainClient: sidechainClient,
+//		rollupChain:     rollupChain,
+//		tokenRegistry:   tokenRegistry,
+//		tokenMapper:     tokenMapper,
+//		txQueue:         make(chan types.Transaction, txQueueSize),
+//	}
+//}
 
 func (tg *TransactionGenerator) Start() {
 	go tg.watchTokenRegistry()

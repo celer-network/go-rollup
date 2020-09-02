@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 
@@ -205,6 +206,11 @@ func (bs *BlockSubmitter) submitSignature(blockNumber *big.Int, transitions [][]
 	}
 	log.Debug().Uint64("blockNumber", blockNumber.Uint64()).Msg("Submitting signature for block")
 	bs.sidechainAuth.GasLimit = 8000000
+
+	nonce, err := bs.sidechainClient.PendingNonceAt(context.Background(), bs.sidechainAuth.From)
+	bs.sidechainAuth.Nonce = big.NewInt(int64(nonce))
+	fmt.Printf("%s submitSignature (nonce %v)\n", bs.sidechainAuth.From.Hex(), nonce)
+
 	tx, err := bs.blockCommittee.SignBlock(bs.sidechainAuth, bs.sidechainAuth.From, signature)
 	if err != nil {
 		return err

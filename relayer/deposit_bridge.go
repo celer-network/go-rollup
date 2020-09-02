@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/rs/zerolog/log"
@@ -15,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/spf13/viper"
 )
 
 type Bridge struct {
@@ -27,27 +27,45 @@ type Bridge struct {
 	tokenMapper             *sidechain.TokenMapper
 }
 
+//func NewBridge(
+//	mainchainClient *ethclient.Client,
+//	sidechainClient *ethclient.Client,
+//	sidechainAuth *bind.TransactOpts,
+//	sidechainAuthPrivateKey *ecdsa.PrivateKey,
+//) (*Bridge, error) {
+//	depositWithdrawManagerAddress := common.HexToAddress(viper.GetString("depositWithdrawManager"))
+//	depositWithdrawManager, err := mainchain.NewDepositWithdrawManager(depositWithdrawManagerAddress, mainchainClient)
+//	if err != nil {
+//		return nil, err
+//	}
+//	tokenMapperAddress := common.HexToAddress(viper.GetString("tokenMapper"))
+//	tokenMapper, err := sidechain.NewTokenMapper(tokenMapperAddress, sidechainClient)
+//	return &Bridge{
+//		mainchainClient:         mainchainClient,
+//		sidechainClient:         sidechainClient,
+//		sidechainAuth:           sidechainAuth,
+//		sidechainAuthPrivateKey: sidechainAuthPrivateKey,
+//		depositWithdrawManager:  depositWithdrawManager,
+//		tokenMapper:             tokenMapper,
+//	}, nil
+//}
+
 func NewBridge(
-	mainchainClient *ethclient.Client,
-	sidechainClient *ethclient.Client,
-	sidechainAuth *bind.TransactOpts,
+	mainchainClient         *ethclient.Client,
+	sidechainClient         *ethclient.Client,
+	sidechainAuth           *bind.TransactOpts,
 	sidechainAuthPrivateKey *ecdsa.PrivateKey,
-) (*Bridge, error) {
-	depositWithdrawManagerAddress := common.HexToAddress(viper.GetString("depositWithdrawManager"))
-	depositWithdrawManager, err := mainchain.NewDepositWithdrawManager(depositWithdrawManagerAddress, mainchainClient)
-	if err != nil {
-		return nil, err
-	}
-	tokenMapperAddress := common.HexToAddress(viper.GetString("tokenMapper"))
-	tokenMapper, err := sidechain.NewTokenMapper(tokenMapperAddress, sidechainClient)
-	return &Bridge{
-		mainchainClient:         mainchainClient,
-		sidechainClient:         sidechainClient,
-		sidechainAuth:           sidechainAuth,
-		sidechainAuthPrivateKey: sidechainAuthPrivateKey,
-		depositWithdrawManager:  depositWithdrawManager,
-		tokenMapper:             tokenMapper,
-	}, nil
+	depositWithdrawManager  *mainchain.DepositWithdrawManager,
+	tokenMapper             *sidechain.TokenMapper,
+	) *Bridge {
+		return &Bridge{
+			mainchainClient:         mainchainClient,
+			sidechainClient:         sidechainClient,
+			sidechainAuth:           sidechainAuth,
+			sidechainAuthPrivateKey: sidechainAuthPrivateKey,
+			depositWithdrawManager:  depositWithdrawManager,
+			tokenMapper:             tokenMapper,
+		}
 }
 
 func (b *Bridge) Start() {
@@ -75,6 +93,13 @@ func (b *Bridge) relayDeposit(
 	if err != nil {
 		return err
 	}
+	log.Print(sidechainErc20Address.Hex(), " ", account.Hex(), " ", amount)
+	b.sidechainAuth.GasLimit = 8000000
+
+	nonce, err := b.sidechainClient.PendingNonceAt(context.Background(), b.sidechainAuth.From)
+	b.sidechainAuth.Nonce = big.NewInt(int64(nonce))
+	fmt.Printf("%s relayDeposit (nonce %v)\n", b.sidechainAuth.From.Hex(), nonce)
+
 	tx, err := sidechainErc20.Deposit(b.sidechainAuth, account, amount, signature)
 	if err != nil {
 		return err
@@ -90,11 +115,13 @@ func (b *Bridge) relayDeposit(
 }
 
 func (b *Bridge) watchMainchainDeposit() {
+	log.Print("Watching Mainchain Deposit")
 	depositChannel := make(chan *mainchain.DepositWithdrawManagerTokenDeposited)
 	b.depositWithdrawManager.WatchTokenDeposited(&bind.WatchOpts{}, depositChannel)
 	for {
 		select {
 		case event := <-depositChannel:
+			log.Print("Seeing TokenDeposited event")
 			log.Debug().Str("token", event.Token.Hex()).Msg("Bridge caught mainchain deposit")
 			err := b.relayDeposit(event.Token, event.Account, event.Amount)
 			if err != nil {

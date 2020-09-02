@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"math/big"
 
 	"github.com/celer-network/rollup-contracts/bindings/go/mainchain"
@@ -94,6 +95,11 @@ func MapToken(
 	if err != nil {
 		log.Fatal().Err(err).Send()
 	}
+
+	nonce, err := conn.PendingNonceAt(context.Background(), auth.From)
+	auth.Nonce = big.NewInt(int64(nonce))
+	fmt.Printf("%s MapToken (nonce %v)\n", auth.From.Hex(), nonce)
+
 	tx, err := tokenMapper.MapToken(auth, token, name, symbol, decimals)
 	if err != nil {
 		log.Fatal().Err(err).Send()
@@ -124,6 +130,11 @@ func DepositAndTransfer(
 		log.Fatal().Err(err).Send()
 	}
 	amount := big.NewInt(1)
+
+	_nonce, err := conn.PendingNonceAt(context.Background(), mapperAuth.From)
+	mapperAuth.Nonce = big.NewInt(int64(_nonce))
+	fmt.Printf("%s Deposit (nonce %v)\n", mapperAuth.From.Hex(), _nonce)
+
 	tx, err := sidechainErc20.Deposit(mapperAuth, auth1.From, amount, nil)
 	if err != nil {
 		log.Fatal().Err(err).Send()
